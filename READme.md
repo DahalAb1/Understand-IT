@@ -11,9 +11,8 @@ Legal agreements, academic papers, and even everyday instructions are often writ
  Using words and language a person is comfortable with:
  - reduces stress
  -  broadens access of information
- - Increase inclusion for people with leanring differences any problem with reading or understanding information.   
-
- Also, this AI‑powered text simplifier, can help customers decode dense contracts information, disclosures, or marketing copy—improving transparency and trust. 
+ - Increase inclusion for people with leanring differences any problem with reading or understanding information.  \n 
+Also, this AI‑powered text simplifier, can help customers decode dense contracts information, disclosures, or marketing copy—improving transparency and trust. 
  ---
 
  ## 2. What the Prototype Already Does
