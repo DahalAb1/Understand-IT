@@ -79,6 +79,18 @@ import tempfile
 import streamlit as st
 ```
 
+##### Libraries Used
+
+| Library | Purpose | Why It's Needed |
+|---------|---------|-----------------|
+| `torch` | Deep learning framework | Required to run the GPT-Neo 1.3B model locally (PyTorch backend). |
+| `pypdf` | PDF reading and text extraction | Used to extract text from uploaded PDF files (first page). |
+| `transformers` | Pre-trained models and tokenizers | Loads GPT-Neo 1.3B model and tokenizer for text paraphrasing. |
+| `fpdf` | PDF creation | Generates downloadable PDF files containing the rewritten text. |
+| `tempfile` | Temporary file management | Creates temporary files for safe and easy downloads without manual cleanup. |
+| `streamlit` | Frontend web framework | Builds the drag-and-drop web application interface for easy user interaction. |
+
+
 ### 2. Extracting Text from PDF 
 
 ```python
