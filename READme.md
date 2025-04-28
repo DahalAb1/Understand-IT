@@ -6,13 +6,12 @@ A technology that paraphrases words or text so everyone—including autistic use
 
 ## 1  Why This Matters
 
-Legal agreements, academic papers, and even everyday instructions are often written in language in overly complex and jargonish structure. Everything can be understood with simpler and understandable words, so I don't see the point in underlying complixity. This just waste productive human hours and make education less accessible, and increases barrier of entry for many people.  
+Legal agreements, academic papers, and even everyday instructions are often written in language in overly complex and jargonish structure. Everything can be understood with simpler and understandable words, so I don't see the point in underlying complixity. This just waste productive human hours and make education less accessible, and increases barrier of entry for many people.  Also, this AI‑powered text simplifier, can help customers decode dense contracts information, disclosures, or marketing copy—improving transparency and trust. 
 
  Using words and language a person is comfortable with:
  - reduces stress
  -  broadens access of information
- - Increase inclusion for people with leanring differences any problem with reading or understanding information.  \n 
-Also, this AI‑powered text simplifier, can help customers decode dense contracts information, disclosures, or marketing copy—improving transparency and trust. 
+ - Increase inclusion for people with leanring differences any problem with reading or understanding information.  
  ---
 
  ## 2. What the Prototype Already Does
@@ -40,6 +39,7 @@ Also, this AI‑powered text simplifier, can help customers decode dense contrac
 
 - **Model Selection:**  Use better model than gpt-neo. Also, change how the model loads information because right now it's very heavy on storage. Basically the main purpose of this is to improve user access and user experience, make it faster and more reliable.
 
+---
 ## 4. How to run this program 
 
 
