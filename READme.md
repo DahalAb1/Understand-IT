@@ -1,4 +1,4 @@
-#### Understand‑IT
+# Understand‑IT
 
 A technology that paraphrases words or text so everyone—including autistic users, non‑native speakers, and busy professionals—can get the insight the words are trying to express easily.
 
@@ -27,7 +27,7 @@ Legal agreements, academic papers, and even everyday instructions are often writ
 
 ## 3. Roadmap & Technical Direction
 
-# 3.1 Near-Term Enhancements
+#### 3.1 Near-Term Enhancements
 
 - **Text-to-Speech (TTS):** This will make text accessible to people with hearing disabilities or anyone who would require speech. 
 
@@ -43,14 +43,14 @@ Legal agreements, academic papers, and even everyday instructions are often writ
 ## 4. How to run this program 
 
 
-# step 1: Clone the repository 
+#### step 1: Clone the repository 
 
 ```bash 
 git clone https://github.com/DahalAb1/Understand-IT.git
 cd Understand-IT
 ```
 
-# step 2: Install Dependencies
+#### step 2: Install Dependencies
 ```bash 
 pip install torch transformers streamlit pypdf fpdf
 ```
@@ -60,15 +60,15 @@ These depndencies are used in the program : torch, transformers, strealit, pypdf
 **you can use pip to install everything** 
 
 
-# Step 3: Run the streamlit application
+#### Step 3: Run the streamlit application
 ```bash 
 streamlit run app.py
 ```
 
 
-## 5. Code Explanation 
+### 5. Code Explanation 
 
-# 1. Libraries
+### 1. Libraries
 
 ```python
 import torch
@@ -79,7 +79,7 @@ import tempfile
 import streamlit as st
 ```
 
-# 2. Extracting Text from PDF 
+### 2. Extracting Text from PDF 
 
 ```python
 def extract_text_from_pdf(file):
@@ -89,7 +89,7 @@ def extract_text_from_pdf(file):
     text = reader.pages[0].extract_text() or ""
     return text.strip()
 ```
-# 3. Loading the GPT-Neo 1.3B Model
+#### 3. Loading the GPT-Neo 1.3B Model
 ```python
 model_name = "EleutherAI/gpt-neo-1.3B"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -97,7 +97,7 @@ model = AutoModelForCausalLM.from_pretrained(model_name)
 ```
  - loading pretrained model from hugging face.
 
-# 4. GPT neo pipeline
+### 4. GPT neo pipeline
 
 ```python
 def reword_text(text, level):
@@ -126,7 +126,7 @@ def reword_text(text, level):
 ```
 - Tokens are inputed into this function so that the model can take in the data and produce resonable output as per the hyperparameters set. 
 
-# 5. Cleaning Text for PDF 
+#### 5. Cleaning Text for PDF 
 ```python
 
 def clean(text):
@@ -136,7 +136,7 @@ def clean(text):
 
 - this handles outlier characters and replaces them with?
 
-# 6. Creating PDF output 
+#### 6. Creating PDF output 
 
 ```python
 
@@ -154,5 +154,5 @@ def text_to_pdf(text):
 ```
 - takes the cleaned text and creates a pdf
 
-# 7. Rest is streamlist front end
+#### 7. Rest is streamlist front end
 
