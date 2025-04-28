@@ -83,7 +83,7 @@ import streamlit as st
 
 | Library | Purpose | Why It's Needed |
 |---------|---------|-----------------|
-| `torch` | Deep learning framework | Required to run the GPT-Neo 1.3B model locally (PyTorch backend). |
+| `torch` | Deep learning framework | Not any specific puspose in this code, but may require while working with tensors. |
 | `pypdf` | PDF reading and text extraction | Used to extract text from uploaded PDF files (first page). |
 | `transformers` | Pre-trained models and tokenizers | Loads GPT-Neo 1.3B model and tokenizer for text paraphrasing. |
 | `fpdf` | PDF creation | Generates downloadable PDF files containing the rewritten text. |
