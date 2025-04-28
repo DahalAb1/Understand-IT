@@ -15,7 +15,7 @@ Using words that are easy for a wide range of people to understand can:
  
  ---
 
- ## 2. Overview of Current Model Functionality
+ ## 2. Overview of Current Model 
 
 | Module                 | Purpose                                                        | Highlights                                           |
 |------------------------|----------------------------------------------------------------|------------------------------------------------------|
