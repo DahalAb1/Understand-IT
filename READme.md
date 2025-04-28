@@ -22,7 +22,7 @@ Using words that are easy for a wide range of people to understand can:
 | `extract_text_from_pdf` | Pulls text from the first page of an uploaded PDF             | Built on `pypdf` (lightweight, no external server)   |
 | `reword_text`          | Sends a prompt to GPT-Neo 1.3B to rewrite text at three levels: Basic, Intermediate, Advanced | Open-source weights available via Hugging Face       |
 | `text_to_pdf`          | Outputs a cleaned, one-page PDF of the rewritten text         | Handles common Latin-1 encoding errors in FPDF       |
-| **Streamlit UI**       | Drag-and-drop PDF uploader, radio-button complexity selector, live output & download buttons | Uses the standard `st.file_uploader` widget          |
+| **Streamlit UI**       | Basic front end UI, live output & download buttons | Uses the standard `st.file_uploader` widget          |
 
 ---
 
