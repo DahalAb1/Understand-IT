@@ -26,7 +26,7 @@ Using words that are easy for a wide range of people to understand can:
 
 ---
 
-## 3.  Future improvements Direction
+## 3.  Future improvements
 
 - **Text-to-Speech (TTS):** This will make text accessible to people with hearing disabilities or anyone who would require speech. 
 
