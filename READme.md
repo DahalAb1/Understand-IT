@@ -1,20 +1,20 @@
 # Understand‑IT
 
 A technology that paraphrases words or text so everyone—including autistic users, non‑native speakers, and busy professionals—can get the insight the words are trying to express easily.
-
+Using words that are easy for a wide range of people to understand can:
+- Reduces stress by making information easy to digest and follow.
+- Broaden access to information, making knowledge that was once only available to a select few accessible to everyone.
+- Increase inclusion for people who have learning differences or difficulties with reading or understanding complex information.
 ---
 
 ## 1.  Why understand-it
 
-Legal agreements, academic papers, and even everyday instructions are often written in language in overly complex and jargonish structure. Everything can be understood with simpler and understandable words, so I don't see the point in underlying complixity. This just waste productive human hours and make education less accessible, and increases barrier of entry for many people.  Also, this AI‑powered text simplifier, can help customers decode dense contracts information, disclosures, or marketing copy—improving transparency and trust. 
+Legal agreements, academic papers, and even everyday instructions are often written in language in overly complex and jargonish way. Everything can be understood with simpler and understandable words, so I don't see the point in underlying complixity. This just waste productive human hours and make education less accessible, and increases barrier of entry for many people.  Also, this technology can help people decode dense information in contracts, disclosures or any sort of legal documents, this improves transparency and trust with those involved. 
 
- Using words and language a person is comfortable with:
- - reduces stress
- -  broadens access of information
- - Increase inclusion for people with leanring differences any problem with reading or understanding information.  
+ 
  ---
 
- ## 2. What the Prototype Already Does
+ ## 2. Overview of Current Model Functionality
 
 | Module                 | Purpose                                                        | Highlights                                           |
 |------------------------|----------------------------------------------------------------|------------------------------------------------------|
@@ -25,9 +25,7 @@ Legal agreements, academic papers, and even everyday instructions are often writ
 
 ---
 
-## 3. Roadmap & Technical Direction
-
-#### 3.1 Near-Term Enhancements
+## 3.  Future improvements Direction
 
 - **Text-to-Speech (TTS):** This will make text accessible to people with hearing disabilities or anyone who would require speech. 
 
