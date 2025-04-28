@@ -1,4 +1,4 @@
-### Understand‑IT
+#### Understand‑IT
 
 A technology that paraphrases words or text so everyone—including autistic users, non‑native speakers, and busy professionals—can get the insight the words are trying to express easily.
 
