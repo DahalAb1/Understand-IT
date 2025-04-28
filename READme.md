@@ -57,7 +57,7 @@ pip install torch transformers streamlit pypdf fpdf
 These depndencies are used in the program : torch, transformers, strealit, pypdf,fpdf  
 
 
-**you can use pip to install everything** 
+**_you can use pip to install everything_** 
 
 
 #### Step 3: Run the streamlit application
