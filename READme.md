@@ -14,6 +14,7 @@ Legal agreements, academic papers, and even everyday instructions are often writ
  - Increase inclusion for people with leanring differences any problem with reading or understanding information.   
 
  Also, this AI‑powered text simplifier, can help customers decode dense contracts information, disclosures, or marketing copy—improving transparency and trust. 
+ ---
 
  ## 2. What the Prototype Already Does
 
@@ -24,11 +25,11 @@ Legal agreements, academic papers, and even everyday instructions are often writ
 | `text_to_pdf`          | Outputs a cleaned, one-page PDF of the rewritten text         | Handles common Latin-1 encoding errors in FPDF       |
 | **Streamlit UI**       | Drag-and-drop PDF uploader, radio-button complexity selector, live output & download buttons | Uses the standard `st.file_uploader` widget          |
 
-
+---
 
 ## 3. Roadmap & Technical Direction
 
-### 3.1 Near-Term Enhancements
+# 3.1 Near-Term Enhancements
 
 - **Text-to-Speech (TTS):** This will make text accessible to people with hearing disabilities or anyone who would require speech. 
 
