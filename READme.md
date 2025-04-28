@@ -4,7 +4,7 @@ A technology that paraphrases words or text so everyone—including autistic use
 
 ---
 
-## 1.  What this is
+## 1.  Why understand-it
 
 Legal agreements, academic papers, and even everyday instructions are often written in language in overly complex and jargonish structure. Everything can be understood with simpler and understandable words, so I don't see the point in underlying complixity. This just waste productive human hours and make education less accessible, and increases barrier of entry for many people.  Also, this AI‑powered text simplifier, can help customers decode dense contracts information, disclosures, or marketing copy—improving transparency and trust. 
 
