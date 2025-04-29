@@ -22,14 +22,7 @@ Unnecessary complexity:
 
 **Simplified Version:** *"The person renting must protect the owner from any problems, claims, or lawsuits that happen because of their use of the property."*
 
----
-
 By making language easier to understand, Understand-It empowers more people to confidently engage with information that might otherwise seem intimidating or confusing.
-
- 
- ---
-
-
 
 ---
 
