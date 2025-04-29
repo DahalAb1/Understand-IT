@@ -1,15 +1,31 @@
 # Understand‑IT
-#### A technology that paraphrases words or text so everyone can get the insight the words are trying to express easily.
+#### A technology that rephrases language to make ideas clearer and more accessible to a broader audience.
 ---
 
-## 1.  Why understand-it
+## 1. What is Understand-it
 
-Legal agreements, academic papers, and even everyday instructions are often written in language in overly complex and jargonish way. Everything can be understood with simpler and understandable words, so I don't see the point in underlying complixity. This just waste productive human hours and make education less accessible, and increases barrier of entry for many people.  Also, this technology can help people decode dense information in contracts, disclosures or any sort of legal documents, this improves transparency and trust with those involved. 
+Legal agreements, academic papers, and even everyday instructions are often written in overly complex and jargonish language. However, This complexity is not necessary. Unnecessary complexity wastes productive human hours, makes education less accessible, and raises barriers to entry for many people.
+This technology helps decode dense information in contracts, disclosures, and other legal documents, promoting greater transparency and trust among all parties involved.
 
-Using words that are easy for a wide range of people to understand can:
-- Reduces stress by making information easy to digest and follow.
-- Broaden access to information, making knowledge that was once only available to a select few accessible to everyone.
-- Increase inclusion for people who have learning differences or difficulties with reading or understanding complex information.
+Using language that is easy for a wide range of people to understand can:
+
+  - Reduce stress by making information easier to digest and follow.
+
+  - Broaden access to knowledge, making information that was once limited to a select few available to everyone.
+
+   - Help people with learning differences, language barriers, or difficulties in processing complex information.
+
+  Here’s an example of the kind of complexity Understand-It addresses:
+  
+   **Original (Complex): **
+
+    "The lessee shall indemnify and hold harmless the lessor from any and all liabilities, claims, and demands, whether arising in tort or contract, which may result from the lessee’s occupancy or use of the leased premises."
+    
+   **Simplified Version: **
+
+    "The person renting must protect the owner from any problems, claims, or lawsuits that happen because of their use of the property."
+
+By making language more accessible, Understand-It helps more people confidently engage with information that would otherwise feel intimidating or confusing.
 
  
  ---
