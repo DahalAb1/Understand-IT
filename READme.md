@@ -18,11 +18,9 @@ Unnecessary complexity:
 
 ### Example of Simplification
 
-**Original (Complex):**  
-*"The lessee shall indemnify and hold harmless the lessor from any and all liabilities, claims, and demands, whether arising in tort or contract, which may result from the lessee’s occupancy or use of the leased premises."*
+**Original (Complex):**  *"The lessee shall indemnify and hold harmless the lessor from any and all liabilities, claims, and demands, whether arising in tort or contract, which may result from the lessee’s occupancy or use of the leased premises."*
 
-**Simplified Version:** 
-*"The person renting must protect the owner from any problems, claims, or lawsuits that happen because of their use of the property."*
+**Simplified Version:** *"The person renting must protect the owner from any problems, claims, or lawsuits that happen because of their use of the property."*
 
 ---
 
