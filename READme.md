@@ -2,43 +2,46 @@
 #### A technology that rephrases language to make ideas clearer and more accessible to a broader audience.
 ---
 
-## 1. What is Understand-it
+# Understand-It
 
-Legal agreements, academic papers, and even everyday instructions are often written in overly complex and jargonish language. However, This complexity is not necessary. Most information can be conveyed using simpler, more understandable array of words without meaning or precision. 
+## What Is Understand-It?
 
-Unnecessary complexity wastes productive human hours, makes education less accessible, and raises barriers to entry for many people.
+Legal agreements, academic papers, and even everyday instructions are often written in overly complex, jargon-heavy language. But this complexity is rarely necessary. Most information can be conveyed just as effectively using a simpler, more understandable set of words—without losing meaning or precision.
 
-Understand It is a technology designed to decode dense complicated information - such as contracts, disclosures, academic papers, any kind of text, and legal documents -
-into clear accessible language. By simplifying communication, it helps solve all the problems mentioned above and ultimately results to a more informed and better society. 
+Unnecessary complexity:
 
-  Here’s an example of the kind of complexity Understand-It addresses:
-  
-   **Original (Complex):**
+- Wastes valuable human hours  
+- Makes education less accessible  
+- Raises barriers to entry for many people  
 
-  "The lessee shall indemnify and hold harmless the lessor from any and all liabilities, claims, and demands, whether arising in tort or contract, which may result from the lessee’s occupancy or use of the leased premises."
-    
-   **Simplified Version:**
-
-  "The person renting must protect the owner from any problems, claims, or lawsuits that happen because of their use of the property."
-
-By making language more accessible, Understand-It helps more people confidently engage with information that would otherwise feel intimidating or confusing.
- 
- ---
-
- ## 2. Overview of Current Model 
-
-| Module                 | Purpose                                                        | Highlights                                           |
-|------------------------|----------------------------------------------------------------|------------------------------------------------------|
-| `extract_text_from_pdf` | Pulls text from the first page of an uploaded PDF             | Built on `pypdf` (lightweight, no external server)   |
-| `reword_text`          | Sends a prompt to GPT-Neo 1.3B to rewrite text at three levels: Basic, Intermediate, Advanced | Open-source weights available via Hugging Face       |
-| `text_to_pdf`          | Outputs a cleaned, one-page PDF of the rewritten text         | Handles common Latin-1 encoding errors in FPDF       |
-| **Streamlit UI**       | Basic front end UI, live output & download buttons | Uses the standard `st.file_uploader` widget          |
+**Understand-It** is a technology designed to decode dense, complicated content—such as contracts, disclosures, academic papers, legal documents, or any kind of text—into clear, accessible language. By simplifying communication, it helps address these challenges and contributes to a more informed, inclusive, and empowered society.
 
 ---
 
-## 3.  Future improvements
+### Example of Simplification
 
-- **Include my story behind how I came to this idea**: Add a section in this repo "The spark behind Understand-It
+**Original (Complex):**  
+*"The lessee shall indemnify and hold harmless the lessor from any and all liabilities, claims, and demands, whether arising in tort or contract, which may result from the lessee’s occupancy or use of the leased premises."*
+
+**Simplified Version:** 
+*"The person renting must protect the owner from any problems, claims, or lawsuits that happen because of their use of the property."*
+
+---
+
+By making language easier to understand, Understand-It empowers more people to confidently engage with information that might otherwise seem intimidating or confusing.
+
+ 
+ ---
+
+
+
+---
+
+## 2.  Future improvements
+
+- **Migrate to mobile device:** I plan to migrate the application to mobile platforms using Flutter, this idea is better suited for mobile phones. 
+
+- **Include my story behind how I came to this idea**: Add a section in this repo "The spark behind Understand-It" 
   
 - **Text-to-Speech (TTS):** This will make text accessible to people with hearing disabilities or anyone who would require speech. 
 
@@ -51,6 +54,18 @@ By making language more accessible, Understand-It helps more people confidently 
 - **Model Selection:**  Use better model than gpt-neo. Also, change how the model loads information because right now it's very heavy on storage. Basically the main purpose of this is to improve user access and user experience, make it faster and more reliable.
 
 ---
+
+ ## 3. Overview of Current Model 
+
+| Module                 | Purpose                                                        | Highlights                                           |
+|------------------------|----------------------------------------------------------------|------------------------------------------------------|
+| `extract_text_from_pdf` | Pulls text from the first page of an uploaded PDF             | Built on `pypdf` (lightweight, no external server)   |
+| `reword_text`          | Sends a prompt to GPT-Neo 1.3B to rewrite text at three levels: Basic, Intermediate, Advanced | Open-source weights available via Hugging Face       |
+| `text_to_pdf`          | Outputs a cleaned, one-page PDF of the rewritten text         | Handles common Latin-1 encoding errors in FPDF       |
+| **Streamlit UI**       | Basic front end UI, live output & download buttons | Uses the standard `st.file_uploader` widget          |
+
+
+--- 
 ## 4. How to run this program 
 
 
