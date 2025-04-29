@@ -1,6 +1,5 @@
 # Understand‑IT
-
-A technology that paraphrases words or text so everyone can get the insight the words are trying to express easily.
+#### A technology that paraphrases words or text so everyone can get the insight the words are trying to express easily.
 ---
 
 ## 1.  Why understand-it
