@@ -13,11 +13,11 @@ into clear accessible language. By simplifying communication, it helps solve all
 
   Here’s an example of the kind of complexity Understand-It addresses:
   
-   **Original (Complex): **
+   **Original (Complex):**
 
   "The lessee shall indemnify and hold harmless the lessor from any and all liabilities, claims, and demands, whether arising in tort or contract, which may result from the lessee’s occupancy or use of the leased premises."
     
-   **Simplified Version: **
+   **Simplified Version:**
 
   "The person renting must protect the owner from any problems, claims, or lawsuits that happen because of their use of the property."
 
