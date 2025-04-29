@@ -2,8 +2,6 @@
 #### A technology that rephrases language to make ideas clearer and more accessible to a broader audience.
 ---
 
-# Understand-It
-
 ## What Is Understand-It?
 
 Legal agreements, academic papers, and even everyday instructions are often written in overly complex, jargon-heavy language. But this complexity is rarely necessary. Most information can be conveyed just as effectively using a simpler, more understandable set of words—without losing meaning or precision.
