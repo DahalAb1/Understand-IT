@@ -4,29 +4,24 @@
 
 ## 1. What is Understand-it
 
-Legal agreements, academic papers, and even everyday instructions are often written in overly complex and jargonish language. However, This complexity is not necessary. Unnecessary complexity wastes productive human hours, makes education less accessible, and raises barriers to entry for many people.
-This technology helps decode dense information in contracts, disclosures, and other legal documents, promoting greater transparency and trust among all parties involved.
+Legal agreements, academic papers, and even everyday instructions are often written in overly complex and jargonish language. However, This complexity is not necessary. Most information can be conveyed using simpler, more understandable array of words without meaning or precision. 
 
-Using language that is easy for a wide range of people to understand can:
+Unnecessary complexity wastes productive human hours, makes education less accessible, and raises barriers to entry for many people.
 
-  - Reduce stress by making information easier to digest and follow.
-
-  - Broaden access to knowledge, making information that was once limited to a select few available to everyone.
-
-   - Help people with learning differences, language barriers, or difficulties in processing complex information.
+Understand It is a technology designed to decode dense complicated information - such as contracts, disclosures, academic papers, any kind of text, and legal documents -
+into clear accessible language. By simplifying communication, it helps solve all the problems mentioned above and ultimately results to a more informed and better society. 
 
   Here’s an example of the kind of complexity Understand-It addresses:
   
    **Original (Complex): **
 
-    "The lessee shall indemnify and hold harmless the lessor from any and all liabilities, claims, and demands, whether arising in tort or contract, which may result from the lessee’s occupancy or use of the leased premises."
+  "The lessee shall indemnify and hold harmless the lessor from any and all liabilities, claims, and demands, whether arising in tort or contract, which may result from the lessee’s occupancy or use of the leased premises."
     
    **Simplified Version: **
 
-    "The person renting must protect the owner from any problems, claims, or lawsuits that happen because of their use of the property."
+  "The person renting must protect the owner from any problems, claims, or lawsuits that happen because of their use of the property."
 
 By making language more accessible, Understand-It helps more people confidently engage with information that would otherwise feel intimidating or confusing.
-
  
  ---
 
@@ -43,6 +38,8 @@ By making language more accessible, Understand-It helps more people confidently 
 
 ## 3.  Future improvements
 
+- **Include my story behind how I came to this idea**: Add a section in this repo "The spark behind Understand-It
+  
 - **Text-to-Speech (TTS):** This will make text accessible to people with hearing disabilities or anyone who would require speech. 
 
 - **Image-to-Text (OCR):**  This feature will allow users to capture text from images and have it paraphrased.
@@ -97,7 +94,7 @@ import streamlit as st
 
 | Library | Purpose | Why It's Needed |
 |---------|---------|-----------------|
-| `torch` | Deep learning framework | Not any specific puspose in this code, but may require while working with tensors. |
+| `torch` | Deep learning framework | Not any specific puspose here, Installing would help in debugging |
 | `pypdf` | PDF reading and text extraction | Used to extract text from uploaded PDF files (first page). |
 | `transformers` | Pre-trained models and tokenizers | Loads GPT-Neo 1.3B model and tokenizer for text paraphrasing. |
 | `fpdf` | PDF creation | Generates downloadable PDF files containing the rewritten text. |
@@ -180,5 +177,6 @@ def text_to_pdf(text):
 ```
 - takes the cleaned text and creates a pdf
 
-#### 7. Rest is streamlist front end
+#### 7. Rest of the code is streamlist front end 
+
 
