@@ -161,7 +161,7 @@ def clean(text):
 
 ```
 
-- this handles outlier characters and replaces them with?
+- this handles outlier characters and replaces them with '?' 
 
 #### 6. Creating PDF output 
 
