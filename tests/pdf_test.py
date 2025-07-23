@@ -15,7 +15,7 @@ def _run_utils_pipeline():
     print("✅ utils pipeline ran without error")
 
 # to launch & kill Streamlit cleanly
-def _launch_streamlit(seconds: int = 10):
+def _launch_streamlit(seconds):
     # path to app/main.py
     main_py = os.path.abspath(os.path.join(
         os.path.dirname(__file__), '..', 'app', 'main.py'))
@@ -32,7 +32,7 @@ def _launch_streamlit(seconds: int = 10):
     os.killpg(os.getpgid(proc.pid), 15)
     print("🛑 Streamlit terminated")
 
-# ── 4. public test entrypoint (pytest will auto‑discover)
+# public test entrypoint (pytest will auto‑discover)
 def test_workflow():
     _run_utils_pipeline()
     _launch_streamlit(10)
