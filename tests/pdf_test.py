@@ -27,10 +27,10 @@
 #         preexec_fn=os.setsid
 #     )
 
-#     print(f"✅ Streamlit started (PID {proc.pid}) – running {seconds}s …")
+#     print(f" Streamlit started (PID {proc.pid}) – running {seconds}s …")
 #     time.sleep(seconds)
 #     os.killpg(os.getpgid(proc.pid), 15)
-#     print("🛑 Streamlit terminated")
+#     print("Streamlit terminated")
 
 # # public test entrypoint (pytest will auto‑discover)
 # def test_workflow():
