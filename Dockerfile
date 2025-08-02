@@ -29,5 +29,8 @@ EXPOSE 80
 # ---- Launch -----------------------------------------------------
 # * headless = no browser pop-up
 # * PORT var makes it Fly.io / Render friendly
-CMD ["streamlit", "run", "app/main.py", "--server.headless=true", "--server.address=0.0.0.0", "--server.port=8501"]
+
+#docker command, to run without fastAPI
+# CMD ["streamlit", "run", "app/main.py", "--server.headless=true", "--server.address=0.0.0.0", "--server.port=8501"]
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
 

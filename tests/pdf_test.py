@@ -1,44 +1,26 @@
-# import os, sys, time, subprocess
-
-# # to make project root importable 
-# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# from app import utils  
-
-# PDF_FILE = 'complex_test.pdf'
-
-
-# def _run_utils_pipeline():
-#     raw_text = utils.extract_text_from_pdf(PDF_FILE)
-#     chunks   = utils.chunk_text(raw_text)
-#     utils.reword_text(chunks)
-#     print("✅ utils pipeline ran without error")
-
-# # to launch & kill Streamlit cleanly
-# def _launch_streamlit(seconds):
-#     # path to app/main.py
-#     main_py = os.path.abspath(os.path.join(
-#         os.path.dirname(__file__), '..', 'app', 'main.py'))
-
-#     proc = subprocess.Popen(
-#         ['streamlit', 'run', main_py],
-#         stdout=subprocess.PIPE,
-#         stderr=subprocess.PIPE,
-#         preexec_fn=os.setsid
-#     )
-
-#     print(f" Streamlit started (PID {proc.pid}) – running {seconds}s …")
-#     time.sleep(seconds)
-#     os.killpg(os.getpgid(proc.pid), 15)
-#     print("Streamlit terminated")
-
-# # public test entrypoint (pytest will auto‑discover)
-# def test_workflow():
-#     _run_utils_pipeline()
-#     _launch_streamlit(10)
-
 def add(a: int, b: int) -> int:
     return a + b
 
 def test_add():
     assert add(2, 3) == 5
+
+from app.utils import chunk_text 
+
+
+def overlap_test():
+    text = "Sentence. "*40 
+    chunks = chunk_text(text)
+    assert len(chunks) > 1 
+
+
+from time import perf_counter
+from app.utils import reword_text 
+
+def cache_speed_test():
+    txt = 'Hello Cache'*20
+    t1 = perf_counter(); reword_text(txt,"Basic");t2 = perf_counter()
+    reword_text(txt,'Basic');t3 = perf_counter()
+    
+    #expecting second call from the cache to be five times faster
+    assert (t3-t2)*5 < (t1 -t0)
+

@@ -3,6 +3,7 @@ from pypdf import PdfReader
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from fpdf import FPDF
 import tempfile
+import app.cache get as cache_get, set as cache_set
 
 model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-large")
 tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-large")
@@ -56,6 +57,13 @@ def reword_text(text, level):
     rewritten_chunks = []
 
     for chunk in chunks:
+
+        # checking the cache before executing the model 
+        cached = cache_get(chunk)
+        if cached:
+            rewritten_chunks.append(cached)
+            continue 
+        
         prompt = instruction + chunk
         inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to("cuda" if torch.cuda.is_available() else "cpu")
         model.to("cuda" if torch.cuda.is_available() else "cpu")
@@ -70,6 +78,11 @@ def reword_text(text, level):
         )
 
         rewritten = tokenizer.decode(output[0], skip_special_tokens=True).strip()
+
+        #storing any new result in cache so same solution is produced instantly 
+
+        cache_set(chunk,rewritten)
+
         rewritten_chunks.append(rewritten)
 
     return "\n\n".join(rewritten_chunks)
