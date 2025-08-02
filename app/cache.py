@@ -29,7 +29,7 @@ def get(txt) -> str|None:
     return row[0] if row else None
 
 #public API, writes to cache. 
-def set(txt, rewritten):
+def set_cache(txt, rewritten):
     con.execute(
         "REPLACE INTO cache VALUES(?,?)",(_key(txt),rewritten)
     )

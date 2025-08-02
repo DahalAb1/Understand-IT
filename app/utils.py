@@ -3,7 +3,8 @@ from pypdf import PdfReader
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from fpdf import FPDF
 import tempfile
-import app.cache get as cache_get, set as cache_set
+from app.cache import get as cache_get, set_cache as cache_set
+
 
 model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-large")
 tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-large")
@@ -46,6 +47,7 @@ def chunk_text(text, max_tokens=512):
 #reword text 
 def reword_text(text, level):
     """Reword the entire input text chunk by chunk."""
+
     if level == "Basic":
         instruction = "Rewrite this using very simple vocabulary:\n"
     elif level == "Intermediate":
