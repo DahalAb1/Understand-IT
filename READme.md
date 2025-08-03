@@ -1,5 +1,4 @@
-<!-- CI badge – replace with your repo path -->
-[![CI](https://github.com/<YOUR_USER>/<YOUR_REPO>/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/<YOUR_USER>/<YOUR_REPO>/actions/workflows/ci.yml)
+
 
 # Understand-IT
 **A technology that rephrases language to make ideas clearer and more accessible to a broader audience.**
