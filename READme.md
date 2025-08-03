@@ -46,7 +46,7 @@ Unnecessary complexity:
 
 | Layer | Tools |
 |-------|-------|
-| Model | `google/flan-t5-large` via 🤗 Transformers |
+| Model | `google/flan-t5-large` via Transformers |
 | Backend | FastAPI · Uvicorn · PyTorch · SQLite |
 | Front-end | Streamlit |
 | Observability | Prometheus & Grafana *(Week 2)* |
@@ -54,7 +54,7 @@ Unnecessary complexity:
 
 ---
 
-## 🚀 Run Locally
+## You can run it locally
 
 ```bash
 git clone https://github.com/<YOUR_USER>/<YOUR_REPO>.git
@@ -72,7 +72,7 @@ streamlit run app/main.py
 # http://localhost:8501  → drag-and-drop PDF
 ```
 
-or with Docker 
+## or with Docker 
 
 ```bash
 docker build -t understand-it .
@@ -85,6 +85,6 @@ Tests
 pytest -q
 ```
 --- 
-📜 License
+License
 
 Apache 2.0 © Abhinesh Dahal
