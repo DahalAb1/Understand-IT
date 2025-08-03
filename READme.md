@@ -1,4 +1,4 @@
-
+[![CI](https://github.com/DahalAb1/Understand-IT/actions/workflows/main.yml/badge.svg)](https://github.com/DahalAb1/Understand-IT/actions/workflows/main.yml)
 
 # Understand-IT
 **A technology that rephrases language to make ideas clearer and more accessible to a broader audience.**
@@ -57,7 +57,7 @@ Unnecessary complexity:
 ## You can run it locally
 
 ```bash
-git clone https://github.com/<YOUR_USER>/<YOUR_REPO>.git
+git clone https://github.com/DahalAb1/Understand-IT.git
 cd Understand-IT
 
 # 1. install deps
