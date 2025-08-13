@@ -7,7 +7,7 @@
 
 ## What Is Understand-IT?
 
-Legal agreements, academic papers, and even everyday instructions are often written in overly complex, jargon-heavy language.  
+Legal agreements, academic papers are often written in overly complex, jargon-heavy language.  
 Most information can be conveyed just as effectively using simpler words—without losing meaning or precision.
 
 Unnecessary complexity:
