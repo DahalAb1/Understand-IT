@@ -1,7 +1,7 @@
 [![CI](https://github.com/DahalAb1/Understand-IT/actions/workflows/main.yml/badge.svg)](https://github.com/DahalAb1/Understand-IT/actions/workflows/main.yml)
 
 # Understand-IT
-**A technology that rephrases language to make ideas clearer and more accessible to a broader audience.**
+**A technology that makes insight accessible to a broader audience.**
 
 ---
 
