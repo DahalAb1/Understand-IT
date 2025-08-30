@@ -3,7 +3,7 @@ from pypdf import PdfReader
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from fpdf import FPDF
 import tempfile
-from app.cache import get as cache_get, set_cache as cache_set
+from cache import get as cache_get, set_cache as cache_set
 
 
 model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-large")
