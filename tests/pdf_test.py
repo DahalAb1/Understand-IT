@@ -22,5 +22,5 @@ def cache_speed_test():
     reword_text(txt,'Basic');t3 = perf_counter()
     
     #expecting second call from theto be five times faster
-    assert (t3-t2)*5 < (t1 -t0)
+    assert (t3-t2)*5 < (t2-t1)
 
