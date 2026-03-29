@@ -1,0 +1,11 @@
+
+notes.txt
+context.txt
+.env
+
+frontend/node_modules/
+frontend/dist/
+__pycache__/
+*.pyc
+*.db
+.DS_Store
