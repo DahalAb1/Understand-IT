@@ -1,5 +1,5 @@
 from typing import Protocol
-from .models import SimplificationRequest, SimplificationResult
+from .models import SimplificationRequest, SimplificationResult, ModelOutput
 
 
 class PdfReaderPort(Protocol):
@@ -10,7 +10,7 @@ class PdfReaderPort(Protocol):
 class ModelPort(Protocol):
     max_input_length: int
 
-    def simplify(self, text: str) -> str:
+    def simplify(self, text: str) -> ModelOutput:
         ...
 
 

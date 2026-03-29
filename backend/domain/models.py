@@ -18,6 +18,14 @@ class Clause:
 
 
 @dataclass
+class ModelOutput:
+    title: str
+    simplified: str
+    risk_level: RiskLevel
+    risk_reason: str | None
+
+
+@dataclass
 class SimplificationRequest:
     pdf_bytes: bytes
 
