@@ -1,0 +1,370 @@
+================================================================
+UNDERSTAND-IT — PROJECT DEEP DIVE & LEARNING CONTEXT
+================================================================
+Written for interview prep. Covers: what the app does, how each
+part works, and the CS/ML concepts behind every decision.
+================================================================
+
+
+----------------------------------------------------------------
+WHAT THE APP DOES
+----------------------------------------------------------------
+Understand-IT takes a PDF, extracts the text, and rewrites it
+in simpler language using an AI model. The user uploads a PDF,
+clicks a button, and gets a plain-language version they can
+download as .txt or .pdf.
+
+Three complexity levels exist in the code (Basic, Intermediate,
+Advanced) but only Basic is meaningful — the others are slated
+for removal since the whole point is simplification.
+
+
+----------------------------------------------------------------
+THE FILES
+----------------------------------------------------------------
+
+app/main.py      — The UI. Built with Streamlit. Handles file
+                   upload, button clicks, displaying output,
+                   download buttons. No logic here.
+
+app/utils.py     — All the logic. PDF extraction, text chunking,
+                   running the AI model, generating output PDFs.
+
+app/cache.py     — Caching layer. Stores model outputs in SQLite
+                   so the same text is never processed twice.
+
+tests/pdf_test.py — Tests. Mostly broken (explained below).
+
+requirements.txt  — Missing streamlit and fpdf. Broken.
+
+.github/workflows/main.yml — CI pipeline. Also broken (explained below).
+
+
+----------------------------------------------------------------
+WHAT IS A TOKEN?
+----------------------------------------------------------------
+A token is the unit the model reads — not a word, not a character,
+but a chunk of characters the model learned during training.
+
+Examples:
+  "hello"        → 1 token
+  "unhappiness"  → 3 tokens: "un", "happi", "ness"
+  "2024"         → 1 token
+  " running"     → 2 tokens: " " and "running"
+
+Why it matters:
+  FLAN-T5-Large (the model used here) has a hard limit of 512
+  tokens input. That's a hardware/architecture constraint — you
+  cannot change it without rebuilding the model.
+
+  A typical page of text is ~400-600 tokens.
+  A 10-page PDF is ~5000 tokens.
+  You CANNOT feed the whole document to the model at once.
+
+This is why chunk_text() exists.
+
+IMPORTANT: Never measure token count with len(text.split()).
+Word count != token count. Always use the tokenizer:
+
+  len(tokenizer(text)["input_ids"])
+
+That's the only accurate measurement.
+
+
+----------------------------------------------------------------
+WHAT IS CHUNKING?
+----------------------------------------------------------------
+Chunking is splitting a long document into pieces small enough
+for the model to process, while keeping each piece coherent.
+
+The code in utils.py (chunk_text function):
+
+  sentences = text.split('. ')
+  for sentence in sentences:
+      potential_chunk = current_chunk + sentence + ". "
+      if len(tokenizer(potential_chunk)["input_ids"]) < 512:
+          current_chunk = potential_chunk   # still fits, keep adding
+      else:
+          chunks.append(current_chunk)      # full, save it
+          current_chunk = sentence + ". "  # start new chunk
+
+WHY SPLIT BY SENTENCES, NOT CHARACTERS?
+  If you cut mid-sentence, the model gets half a thought:
+    "The patient should take two tablets daily with food and avoid"
+  ...and produces garbage because the context is broken.
+  Splitting at sentence boundaries keeps each chunk a complete
+  set of ideas.
+
+RESULT: A 10-page PDF becomes ~10-20 chunks, each under 512 tokens,
+each fed to the model one at a time. Outputs are joined at the end.
+
+
+----------------------------------------------------------------
+WHAT IS TEMPERATURE?
+----------------------------------------------------------------
+Temperature controls how "random" or "creative" the model is.
+
+Under the hood, when the model predicts the next token, it doesn't
+just pick one word — it produces a probability score for every
+word in its vocabulary (~32,000 words):
+
+  "simple"    → 45%
+  "easy"      → 30%
+  "basic"     → 15%
+  "airplane"  → 0.001%
+  ...
+
+Temperature scales this distribution before sampling:
+
+  temperature = 0    → always pick the #1 word. Deterministic.
+                        Produces repetitive, robotic output.
+
+  temperature = 1.0  → use the probabilities as-is. Neutral.
+
+  temperature > 1.0  → flatten the distribution. Even unlikely
+                        words get a real chance. Gets weird fast.
+
+  temperature = 0.8  → slightly sharpen the distribution.
+                        Favors sensible words but still has variety.
+                        Sweet spot for rewriting tasks.
+
+The developer chose 0.8 — not robotic, not chaotic.
+
+OTHER SAMPLING PARAMETERS IN THE CODE:
+
+  do_sample=True   → enables probabilistic sampling (if False,
+                     always picks most likely word — greedy decoding)
+
+  top_k=50         → before sampling, throw away everything except
+                     the top 50 most likely tokens. Eliminates
+                     completely insane options.
+
+  top_p=0.9        → nucleus sampling. Instead of fixed top-50,
+                     take the smallest set of tokens whose combined
+                     probability adds up to 90%. More adaptive
+                     than top_k. Used together with top_k.
+
+  max_new_tokens=400 → hard cap on output length.
+
+ORDER OF OPERATIONS:
+  1. Model produces raw probability scores (logits)
+  2. top_k filter: keep only top 50
+  3. top_p filter: narrow further to 90% nucleus
+  4. temperature scaling applied
+  5. sample one token from the result
+  6. repeat until done or max_new_tokens hit
+
+
+----------------------------------------------------------------
+HOW THE CACHING WORKS
+----------------------------------------------------------------
+Problem: The AI model is slow. Running it on the same paragraph
+twice is wasteful — same input always produces similar output.
+
+Solution: Store the model's output in a database, keyed by the
+input. Next time the same input arrives, return the stored result
+without touching the model.
+
+HOW THE KEY IS MADE (cache.py, _key function):
+
+  hashlib.sha256("The mitochondria is the powerhouse...".encode()).hexdigest()
+  → "a3f9c12b8e74d..."
+
+SHA-256 is a one-way hash function:
+  - Same input → always same hash (deterministic)
+  - Different input → completely different hash
+  - You cannot reverse it (one-way)
+  - 64-character hex string, always fixed length regardless of input size
+
+The database (cache.db, SQLite) stores:
+  | hash (PRIMARY KEY)  | text (model output)              |
+  | "a3f9c12b8e74d..."  | "The cell's battery makes energy"|
+
+FLOW:
+  1. Text chunk arrives
+  2. Compute SHA-256 hash of the chunk
+  3. Query: SELECT text FROM cache WHERE hash = ?
+  4a. Hit → return stored text instantly. Model never runs.
+  4b. Miss → run model → store (hash, output) → return output
+
+SQL INJECTION PREVENTION (important interview point):
+  The developer uses parameterized queries:
+    cursor.execute("SELECT text FROM cache WHERE hash = ?", (_key(txt),))
+
+  NOT string formatting like:
+    cursor.execute(f"SELECT text FROM cache WHERE hash = '{key}'")
+
+  The ? placeholder + tuple syntax means the DB driver handles
+  escaping. A malicious string in the input can never modify the
+  SQL query structure.
+
+THE BUG IN THE CACHE (worth knowing):
+  The cache key is hash(input_chunk) only.
+  It does NOT include the complexity level.
+
+  If chunk X is processed on "Basic" → cached.
+  Next request for chunk X on "Advanced" → returns Basic result.
+
+  Fix: hash(input_chunk + level)
+
+
+----------------------------------------------------------------
+HOW THE PROMPT IS CONSTRUCTED (Prompt Engineering)
+----------------------------------------------------------------
+The developer uses instruction prompting — prepend a natural
+language instruction to the text chunk before feeding to model:
+
+  instruction = "Rewrite this using very simple vocabulary:\n"
+  prompt = instruction + chunk
+
+Model receives:
+  "Rewrite this using very simple vocabulary:
+   The mitochondria is the powerhouse of the cell..."
+
+This is called ZERO-SHOT PROMPTING — no examples given, just
+an instruction. FLAN-T5 was specifically fine-tuned on
+instruction-following tasks, so it responds well to this pattern.
+
+You are NOT fine-tuning the model. You're steering a pre-trained
+model with words. This is a core concept in applied LLM work.
+
+
+----------------------------------------------------------------
+WHAT'S BROKEN / ISSUES TO KNOW
+----------------------------------------------------------------
+
+1. REQUIREMENTS.TXT IS INCOMPLETE
+   Missing: streamlit, fpdf2
+   Present but unused in main app: fastapi, uvicorn
+   (There's a server.py suggesting FastAPI was planned)
+
+2. CI WILL NEVER WORK AS-IS
+   The tests import from app.utils:
+     from app.utils import chunk_text
+
+   utils.py loads the model at import time (lines 9-10):
+     model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-large")
+
+   FLAN-T5-Large is ~3GB. GitHub CI will time out trying to
+   download it on every test run.
+
+3. TESTS DON'T ACTUALLY RUN
+   overlap_test() and cache_speed_test() don't start with test_
+   pytest only auto-discovers functions named test_*
+   The only test that runs is test_add() which tests 2+3==5.
+   The entire CI pipeline essentially does nothing useful.
+
+4. MODEL LOADED AT IMPORT TIME (design issue)
+   utils.py lines 9-10 run when anything imports utils.
+   Better pattern: lazy loading — load model only when first needed.
+   This causes slow startup and makes testing painful.
+
+5. GPU MOVE INSIDE LOOP (inefficiency)
+   model.to("cuda" if torch.cuda.is_available() else "cpu")
+   This runs on every chunk. .to() is a no-op if already there,
+   but it's wasteful. Should run once before the loop.
+
+
+----------------------------------------------------------------
+THE ARCHITECTURE PATTERN (for interviews)
+----------------------------------------------------------------
+The core pattern here has a name: Chunk → Instruct → Generate → Cache
+
+This is used in real production LLM systems. Key principles:
+
+  1. Token limits are hard constraints — you must chunk long inputs
+  2. Prompt engineering (prepending instructions) is often enough
+     — you don't need to fine-tune a model for simple tasks
+  3. Cache model outputs — inference is expensive, storage is cheap
+  4. Use the tokenizer to measure length, never word/char counts
+  5. Sentence-boundary chunking preserves semantic coherence
+
+
+----------------------------------------------------------------
+PENDING REFACTOR (to be done later)
+----------------------------------------------------------------
+- Remove Intermediate and Advanced complexity levels (just keep Basic)
+- Remove SQLite cache → replace with Redis or in-memory dict
+- Replace Streamlit UI → proper React frontend + FastAPI backend
+- Fix requirements.txt (add streamlit, fpdf; remove unused packages)
+- Fix CI: mock model loading, fix test function names
+- Fix cache bug: include level in the cache key
+
+The FastAPI skeleton already exists in server.py — the bones are
+there for the backend refactor.
+
+----------------------------------------------------------------
+REFACTOR — HEXAGONAL ARCHITECTURE (decided 2026-03-28)
+----------------------------------------------------------------
+Replacing Streamlit with React + FastAPI using hexagonal architecture.
+
+WHAT IS HEXAGONAL ARCHITECTURE:
+The domain (business logic) sits at the center and knows nothing
+about the outside world. It only talks to ports — contracts that
+define what is needed. Adapters are the concrete implementations
+that plug into those ports.
+
+Everything is described relative to the domain:
+  Inbound  = things that trigger the domain (React → FastAPI → domain)
+  Outbound = things the domain calls out to (SQLite, FLAN-T5, pypdf)
+
+The domain never imports FastAPI, sqlite3, transformers, or pypdf.
+It only imports port interfaces. This means you can swap any adapter
+without touching business logic.
+
+FILE STRUCTURE:
+  backend/
+    server.py                      — composition root, wires everything
+    domain/
+      models.py                    — SimplificationRequest, SimplificationResult
+      ports.py                     — SimplifierPort, ModelPort, CachePort, PdfReaderPort
+      simplifier.py                — SimplifierService, the brain
+    adapters/
+      inbound/
+        api.py                     — FastAPI router (inbound adapter)
+      outbound/
+        flan_t5.py                 — FLAN-T5 inference (outbound adapter)
+        sqlite_cache.py            — SQLite cache (outbound adapter)
+        pypdf_reader.py            — PDF text extraction (outbound adapter)
+  frontend/
+    src/App.jsx                    — React UI
+
+PORTS:
+  SimplifierPort  — inbound  — simplify(request) → result
+  PdfReaderPort   — outbound — extract(bytes) → str
+  ModelPort       — outbound — max_input_length, generate(prompt) → str
+  CachePort       — outbound — get(key), set(key, value)
+
+WHY max_input_length ON ModelPort:
+  Chunking size depends on the model. The adapter exposes its limit.
+  The domain reads it and chunks accordingly.
+  Swap to GPT-4 (128k tokens) → domain chunks differently automatically.
+
+DATA FLOW:
+  React → HTTP POST with PDF
+  api.py (inbound adapter) receives it
+  calls SimplifierPort.simplify()
+  simplifier.py extracts text via PdfReaderPort
+  gets max_input_length from ModelPort
+  chunks text using that limit
+  for each chunk: checks CachePort.get() → on miss: ModelPort.generate() → CachePort.set()
+  returns SimplificationResult
+  api.py serializes to JSON
+  React receives simplified text
+
+DOCKER PLAN (to be done after code is written):
+  2 containers only:
+    frontend container — nginx serving React build, port 3000
+    backend container  — uvicorn running server.py, port 8000
+  Architecture layers are NOT separate containers.
+  Domain, adapters, FastAPI all run in one uvicorn process.
+  docker-compose.yml wires the two containers together.
+
+KEY CONCEPT — SCREAMING ARCHITECTURE:
+  Folder structure should scream what the app does, not what
+  framework it uses. "simplification/" tells you more than
+  "controllers/" ever would.
+
+================================================================
+END OF CONTEXT
+================================================================

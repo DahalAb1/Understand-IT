@@ -1,0 +1,449 @@
+DOCKER NOTES
+=============
+
+1. WHAT DOCKER ACTUALLY IS
+--------------------------
+
+Docker is NOT a virtual machine. It's a tool that runs regular Linux processes
+with isolation walls around them.
+
+A container is just a process running on the host's kernel with:
+  - Namespaces (isolation — restricted view of the system)
+  - Cgroups (resource limits — how much CPU/RAM it can use)
+
+There is only ONE kernel on the machine. Containers share it.
+The kernel is below everything — it manages all processes, containerized or not.
+The "container" is just a set of rules the kernel applies to a process.
+
+
+2. PROCESSES AND BINARIES
+--------------------------
+
+A process is a running instance of a program. Every program you run becomes a process
+with a PID (process ID), its own memory, and access to system resources.
+
+A binary is a compiled file of raw machine code (1s and 0s) that the CPU executes
+directly. You can't read it in a text editor. Examples:
+  /usr/bin/python    — the Python interpreter itself (compiled from C)
+  /usr/bin/bash      — the shell
+  /usr/bin/postgres  — the database server
+  /usr/bin/runc      — the tool Docker uses to create containers
+
+Python scripts (main.py) are text files. The python binary reads and interprets them.
+The binary is the executor, the script is the instructions.
+
+You can check with:  file /usr/bin/python3  →  "ELF 64-bit LSB executable"
+                      file main.py          →  "Python script, ASCII text"
+
+
+3. SYMLINKS
+-----------
+
+A symlink (symbolic link) is a file that just points to another file.
+It stores a path, not data. Like a shortcut.
+
+  ln -s /real/path/to/file.txt /shortcut
+
+/shortcut is ~50 bytes — it just contains the string "/real/path/to/file.txt".
+When you open the symlink, the OS follows the pointer and opens the real file.
+
+If the real file is deleted, the symlink breaks (points to nothing).
+If the real file changes, the symlink "sees" the change (it was always just pointing).
+
+Example chain:
+  /usr/bin/python → /usr/bin/python3 → /usr/bin/python3.11 (actual binary)
+
+
+4. WHY NOT JUST USE VENV?
+--------------------------
+
+A venv isolates Python packages. That's ONE layer. It does NOT isolate:
+  - The Python version itself
+  - System-level C libraries (libpq for psycopg2, libssl, etc.)
+  - Services like PostgreSQL, Redis, nginx
+  - OS-level differences (file paths, sockets, case sensitivity)
+
+When your dependency tree is pure Python, venv is fine.
+When you pip install psycopg2 and it fails because your teammate doesn't have
+PostgreSQL dev headers installed — venv can't help.
+
+Docker isolates EVERYTHING the process can see:
+  - Filesystem (different Python versions in different containers, no conflict)
+  - Network (own port pool, own localhost)
+  - System libraries (baked into the image)
+  - The runtime itself
+
+
+5. NAMESPACES (THE WALLS)
+--------------------------
+
+Namespaces give a process a restricted view of the system.
+Types that matter:
+
+  PID namespace:
+    Process sees its own process tree. Thinks it's PID 1.
+    Can't see or kill processes outside its namespace.
+    From the host, it's just PID 48293 or whatever.
+
+  Mount namespace:
+    Process gets its own filesystem tree.
+    When it does ls /, it sees the image's files, not the host's.
+
+  Network namespace:
+    Process gets its own network interfaces, IP, and PORT POOL.
+    Two containers can both bind to port 8000 — different pools, no conflict.
+
+  UTS namespace:
+    Own hostname.
+
+  User namespace:
+    Process can think it's root (UID 0) inside the container
+    while actually being unprivileged on the host.
+
+
+6. CGROUPS (THE LIMITS)
+-------------------------
+
+Cgroups limit HOW MUCH of the system's resources a process can use.
+Example: "this process gets at most 512MB RAM and 50% of one CPU core."
+Without cgroups, a runaway process could eat all resources.
+
+
+7. NETWORKING IN DOCKER
+-------------------------
+
+Each container gets its own set of 65,535 ports (via network namespace).
+These are INTERNAL ports — not reachable from outside.
+
+To make a container reachable, you explicitly map host ports to container ports:
+
+  -p 8080:8000    means: take port 8080 from the HOST's pool,
+                         forward traffic to port 8000 in the container's pool.
+
+  Left side = host port (shared pool, one owner per port)
+  Right side = container internal port (private pool)
+
+Two containers CAN both use internal port 8000.
+Two containers CANNOT both map to host port 8080.
+
+  container A: -p 8080:8000    host 8080 → container A's 8000  ✓
+  container B: -p 8081:8000    host 8081 → container B's 8000  ✓
+  container B: -p 8080:8000    FAILS — host 8080 already taken  ✗
+
+Request flow:
+  Browser hits localhost:8080
+    → Host's real network stack receives it on port 8080
+      → Docker's iptables rule forwards into Container A's namespace
+        → Container A receives it on its internal port 8000
+
+Docker bridge network:
+  Docker creates a virtual bridge (docker0) connecting all containers to the host.
+  Containers on the same Docker network can talk to each other using service names
+  as hostnames (internal DNS). FastAPI reaches Postgres at "db:5432" on the internal
+  network — no host port mapping needed for container-to-container communication.
+
+In docker-compose.yml:
+  ports: ["8080:8000"]    — maps host 8080 to container 8000
+  Service names are hostnames — "db" resolves to the Postgres container's internal IP.
+
+
+8. IMAGES AND LAYERS
+---------------------
+
+An image is a FILESYSTEM SNAPSHOT stored on disk. It's inert — like an .iso file.
+It doesn't run, doesn't have a network, doesn't have ports.
+
+When you docker run, Docker takes that snapshot and mounts it as the root filesystem
+for a new process (via mount namespace). The container is the living thing.
+The image is the blueprint.
+
+You can have one image and spin up 10 containers from it,
+each with their own separate namespaces.
+
+LAYERS:
+Each Dockerfile instruction creates a layer — a diff of files changed.
+
+  FROM python:3.11-slim       Layer 0: ~120MB (Debian + Python)
+  RUN pip install fastapi      Layer 1: +15MB (adds site-packages files)
+  COPY . /app                  Layer 2: +2MB (adds your code)
+
+Layers stack using a union filesystem (OverlayFS). When a process reads a file,
+the kernel checks from top layer down until it finds it.
+
+LAYER CACHING:
+Docker saves the result of each instruction. If nothing changed, it skips that step.
+
+BAD order (rebuilds pip install every time you change code):
+  FROM python:3.11-slim
+  COPY . /app                    ← code changed, must re-run
+  RUN pip install -r requirements.txt  ← invalidated, re-runs (45 seconds)
+
+GOOD order (skips pip install when only code changes):
+  FROM python:3.11-slim
+  COPY requirements.txt /app/    ← didn't change, skip
+  RUN pip install -r /app/requirements.txt  ← input unchanged, skip (cached)
+  COPY . /app                    ← code changed, re-runs (<1 second)
+
+Rule: order Dockerfile from least-changing to most-changing.
+The moment Docker hits a changed line, everything below re-runs.
+
+
+9. DOCKER ON MAC/WINDOWS vs LINUX
+-----------------------------------
+
+Namespaces and cgroups are Linux kernel features. They don't exist on macOS or Windows.
+
+On Linux: Docker talks directly to the host kernel. No VM. Containers are host processes.
+On Mac/Windows: Docker Desktop runs a lightweight Linux VM, then runs containers inside it.
+
+The VM is a workaround. On a production Linux server (like an AWS EC2 Ubuntu instance),
+there's no VM layer. Containers run directly as host processes.
+
+
+10. CONTAINER SECURITY
+-----------------------
+
+THE ROOT PROBLEM:
+Containers share the host kernel. Kernel code has bugs.
+If a vulnerability exists in namespace implementation, a process inside
+the container can escape and access the host.
+
+If the container runs as root (UID 0) and escapes → root on the host. Game over.
+If the container runs as appuser and escapes → unprivileged on the host. Limited damage.
+
+REAL EXAMPLE — CVE-2019-5736:
+
+  /proc is a virtual filesystem. The kernel generates it, exposing process info as files.
+  /proc exists BELOW namespaces — the kernel manages it for all processes.
+
+  /proc/[pid]/exe is a symlink pointing to the binary that started a process.
+  This symlink points to the REAL path on the HOST filesystem.
+
+  Attack chain:
+  1. Attacker exploits a bug in your FastAPI code, gets code execution in the container
+  2. Attacker waits for runc to appear (happens on docker exec)
+  3. runc enters the container's PID namespace to set up a new process
+  4. Container can now see runc in /proc — and /proc/[runc_pid]/exe
+     points to /usr/bin/runc on the HOST filesystem
+  5. Attacker writes through that symlink, overwrites host's /usr/bin/runc
+  6. Next docker command runs attacker's code as root on the host
+
+  The symlink crossed the namespace wall. /proc is kernel-level,
+  and the kernel doesn't restrict /proc entries by namespace boundaries.
+
+  Why non-root helps: appuser can't write to /usr/bin/runc.
+  The symlink exists, the tunnel is there, but the door is locked.
+
+DEFENSE IN DEPTH:
+  - USER appuser in Dockerfile (non-root process)
+  - Dropped capabilities (Docker drops CAP_SYS_ADMIN etc. by default)
+  - seccomp profiles (blocks ~44 dangerous syscalls)
+  - --read-only filesystem (can't write anywhere)
+  - --cap-drop=ALL (drop ALL capabilities)
+  - --security-opt=no-new-privileges (can't escalate via setuid)
+  - Keep Docker and kernel updated (patches known escape CVEs)
+
+No single wall is guaranteed. Layer them.
+
+
+11. DOCKERFILE BEST PRACTICES
+-------------------------------
+
+  Keep images small.
+    Use python:3.11-slim (~120MB) not python:3.11 (~900MB).
+    Less attack surface, faster builds, faster deploys.
+
+  One process per container.
+    Don't run FastAPI and Postgres in the same container.
+    Independent scaling, restarts, and logs.
+
+  Don't run as root.
+    RUN useradd --create-home appuser
+    USER appuser
+    Do installs as root first, switch to appuser before CMD.
+
+  Order by change frequency.
+    System deps → language deps → your code.
+    Maximizes layer cache hits.
+
+  Pin versions.
+    FROM python:3.11.9-slim, not python:latest.
+    pip install fastapi==0.111.0, not just fastapi.
+    Reproducibility is the whole point.
+
+  Don't store state in containers.
+    Containers are disposable. Data goes in volumes.
+
+  Don't put secrets in images.
+    Never ENV DATABASE_PASSWORD=hunter2 in Dockerfile.
+    Pass secrets at runtime via env vars or Docker secrets.
+
+  Use .dockerignore.
+    Exclude .git, node_modules, __pycache__, .env.
+    Prevents bloat and secret leakage.
+
+  Use multi-stage builds for compiled/bundled output.
+    FROM node:18 AS build
+    RUN npm run build
+    FROM nginx:alpine
+    COPY --from=build /app/dist /usr/share/nginx/html
+    Final image has no Node, no node_modules, no source code.
+
+
+12. KEY DOCKER COMMANDS
+-------------------------
+
+  docker build -t myapp .           Build image from Dockerfile
+  docker run -p 8000:8000 myapp     Run container, map port
+  docker ps                         List running containers
+  docker logs <id>                  View container output
+  docker exec -it <id> bash         Shell into running container
+  docker stop <id>                  Stop container
+  docker images                     List images
+  docker compose up                 Start all services from docker-compose.yml
+  docker compose down               Stop and remove all services
+
+
+13. DOCKER COMPOSE (MULTI-SERVICE)
+------------------------------------
+
+For your FRAP stack (FastAPI + React + PostgreSQL):
+
+  services:
+    backend:
+      build: ./backend
+      ports: ["8000:8000"]
+      depends_on: [db]
+      environment:
+        DATABASE_URL: postgresql://user:pass@db:5432/workout
+
+    db:
+      image: postgres:15
+      volumes: [pgdata:/var/lib/postgresql/data]
+      environment:
+        POSTGRES_PASSWORD: pass
+
+    frontend:
+      build: ./frontend
+      ports: ["3000:3000"]
+
+  volumes:
+    pgdata:
+
+  Run with: docker compose up
+  All three start, connected on internal network.
+  Backend reaches Postgres at hostname "db" (Docker internal DNS).
+
+
+14. RESOURCES
+--------------
+
+  Julia Evans — "What even is a container: namespaces and cgroups"
+    https://jvns.ca/blog/2016/10/10/what-even-is-a-container/
+    Hands-on walkthrough of creating namespaces and cgroups manually.
+
+  Julia Evans — "How Containers Work" (paid zine, $12)
+    https://wizardzines.com/zines/containers/
+    Covers images, overlayfs, capabilities, pivot_root, cgroups, namespaces, seccomp-bpf.
+    Shows how to run a container with 15 lines of bash.
+
+  Julia Evans — "How containers work: overlayfs"
+    https://jvns.ca/blog/2019/11/18/how-containers-work--overlayfs/
+    The union filesystem that makes image layers work.
+
+
+SUMMARY
+--------
+
+Image = filesystem snapshot on disk (inert blueprint)
+Container = running process created from an image (the living thing)
+Namespace = kernel feature that restricts what a process can see
+Cgroup = kernel feature that limits how much resources a process can use
+Docker = tooling that orchestrates all of this with a nice CLI
+The kernel = the single bottom layer that manages everything
+/proc = kernel's virtual filesystem exposing process data, crosses namespace walls
+
+
+
+
+HEXAGONAL ARCHITECTURE NOTES
+==============================
+ 
+ 
+WHAT IT IS
+----------
+ 
+One rule: your business logic should not depend on anything external.
+ 
+Your business logic doesn't know or care whether it's talking to PostgreSQL
+or SQLite, whether requests come from a REST API or a CLI, whether you send
+emails via SendGrid or SMTP. It defines what it needs, and other code plugs
+in to provide it.
+ 
+ 
+THREE PIECES
+------------
+ 
+Domain:
+  Your core business logic. Pure code, no external imports.
+  No database queries, no HTTP, no framework code.
+  Just the rules of your application.
+  The domain is the center — it sets the rules, everything else conforms to it.
+ 
+Ports:
+  Interfaces defined BY the domain that say "I need something that can do X"
+  without saying how. Abstract classes or protocols.
+  The domain depends on ports. Adapters implement ports.
+  Ports are the plug between domain and adapters.
+ 
+Adapters:
+  Concrete implementations that plug into ports.
+  The parts that actually touch the outside world — databases, APIs, file systems.
+  Adapters do NOT define their own ports. They implement the ports the domain defines.
+ 
+The relationship:
+  Adapter → implements → Port ← depends on ← Domain
+ 
+Data flows from outside in through adapters, through ports, into the domain.
+The domain never reaches outward. It only talks to the port interface.
+ 
+ 
+WHY IT MATTERS
+--------------
+ 
+Testing:
+  Swap the real database adapter for an in-memory fake.
+  Test business logic with no database, no Docker, no cleanup.
+  Tests run in milliseconds.
+ 
+Swapping infrastructure:
+  Move from Postgres to DynamoDB — write one new adapter.
+  Domain, tests, business rules stay untouched.
+ 
+Dependency direction:
+  In normal code, business logic imports the database library.
+  In hexagonal, the database adapter imports the domain's interface.
+  External things depend on the domain, never the other way around.
+ 
+ 
+COMPOSITION OVER INHERITANCE
+-----------------------------
+ 
+Hexagonal architecture uses composition, not inheritance.
+ 
+Composition: build something by combining smaller pieces together.
+The domain receives its dependencies (adapters) as pieces passed in,
+rather than inheriting from a parent class.
+ 
+The domain doesn't inherit from the adapter. It receives it.
+You can swap what you pass in without changing the domain.
+ 
+ 
+SUMMARY
+-------
+ 
+Domain = pure business rules, no external imports, defines the ports
+Ports = interfaces saying what the domain needs, not how
+Adapters = concrete implementations that plug into ports
+The domain is the center. Everything else conforms to it.
+Adapters never define their own ports — they implement the domain's.
