@@ -9,7 +9,7 @@ class GeminiAdapter:
 
     def __init__(self):
         genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-        self.model = genai.GenerativeModel("gemini-1.5-flash")
+        self.model = genai.GenerativeModel("gemini-2.0-flash")
 
     def simplify(self, text: str) -> ModelOutput:
         prompt = (
