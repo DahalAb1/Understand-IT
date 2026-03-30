@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 from .domain.simplifier import SimplifierService
 from .adapters.outbound.pypdf_reader import PypdfReaderAdapter
-from .adapters.outbound.anthropic_adapter import AnthropicAdapter
+from .adapters.outbound.groq_adapter import GroqAdapter
 from .adapters.outbound.sqlite_cache import SqliteCacheAdapter
 from .adapters.inbound.api import create_router
 
@@ -21,7 +21,7 @@ app.add_middleware(
 
 simplifier = SimplifierService(
     reader=PypdfReaderAdapter(),
-    model=AnthropicAdapter(),
+    model=GroqAdapter(),
     cache=SqliteCacheAdapter(),
 )
 
