@@ -1,3 +1,10 @@
-# Outbound adapter. Implements PdfReaderPort.
-# All pypdf code lives here.
-# extract(file_bytes) — reads every page, returns full text as a single string.
+import io
+from pypdf import PdfReader
+
+
+class PypdfReaderAdapter:
+    def extract(self, pdf_bytes: bytes) -> str:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        return " ".join(
+            page.extract_text() or "" for page in reader.pages
+        )
