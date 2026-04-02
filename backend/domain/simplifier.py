@@ -14,6 +14,7 @@ from .models import (
     SimplificationRequest,
     SimplificationResult,
 )
+from .policies import get_clause_policy
 from .ports import CachePort, ModelPort, PdfReaderPort
 from .segmenter import ClauseSegment, ClauseSegmenter, extract_defined_terms
 from .verifier import ClauseVerifier
@@ -241,6 +242,12 @@ class SimplifierService:
             if clause.risk_level == RiskLevel.HIGH or clause.confidence is not None and clause.confidence < 0.55
         )[:8]
 
+        policy_driven_sections = self._unique(
+            clause.source_location
+            for clause in clauses
+            if clause.clause_type and get_clause_policy(clause.clause_type) and clause.source_location
+        )[:8]
+
         overview_parts = [
             f"This {metadata.document_type.replace('_', ' ')} contains {len(clauses)} analyzed clause{'s' if len(clauses) != 1 else ''}.",
         ]
@@ -250,6 +257,8 @@ class SimplifierService:
             overview_parts.append("The document creates concrete obligations that should be reviewed closely.")
         if key_deadlines:
             overview_parts.append("It also includes timing requirements.")
+        if policy_driven_sections:
+            overview_parts.append("Several sensitive legal sections receive elevated review because they can materially change rights or liability.")
         if metadata.warnings:
             overview_parts.append("Some document-quality warnings may affect interpretation.")
 
@@ -261,7 +270,7 @@ class SimplifierService:
             key_obligations=key_obligations,
             key_deadlines=key_deadlines,
             key_money_terms=key_money_terms,
-            sections_requiring_review=sections_requiring_review,
+            sections_requiring_review=self._unique([*sections_requiring_review, *policy_driven_sections])[:8],
         )
 
     def _cache_key(self, text: str, document_type: str) -> str:

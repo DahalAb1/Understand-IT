@@ -1,6 +1,7 @@
 import re
 
 from .models import ClauseContext, ClauseExtraction, DocumentMetadata, RiskLevel
+from .policies import get_clause_policy
 from .segmenter import extract_defined_terms
 
 
@@ -13,6 +14,7 @@ CLAUSE_TYPE_PATTERNS = {
     "governing_law": ("governing law", "laws of", "jurisdiction"),
     "ip": ("intellectual property", "ownership", "assign", "license"),
     "renewal": ("renewal", "auto-renew", "renew automatically"),
+    "arbitration": ("arbitration", "jury trial", "class action", "dispute"),
 }
 
 DEADLINE_RE = re.compile(
@@ -40,6 +42,7 @@ class HeuristicClauseExtractor:
         context: ClauseContext,
     ) -> ClauseExtraction:
         clause_type = self._classify_clause_type(text)
+        policy = get_clause_policy(clause_type)
         obligations = self._collect_sentences(text, OBLIGATION_RE)
         rights = self._collect_sentences(text, RIGHT_RE)
         conditions = self._collect_sentences(text, CONDITION_RE)
@@ -58,14 +61,18 @@ class HeuristicClauseExtractor:
             missing_context.append("The uploaded document may be incomplete.")
         if metadata.ocr_quality != "good":
             missing_context.append("OCR quality may affect the accuracy of this summary.")
+        if policy:
+            missing_context.extend(self._policy_warnings(text, policy.review_triggers))
 
         title = self._title_from_text(text, clause_type, context.parent_heading)
-        plain_english = self._plain_english(title, obligations, rights, conditions, exceptions, deadlines, money_terms, context)
+        plain_english = self._plain_english(title, obligations, rights, conditions, exceptions, deadlines, money_terms, context, policy)
         legal_precision_note = None
-        if conditions or exceptions or context.referenced_sections:
+        if policy and policy.precision_note:
+            legal_precision_note = policy.precision_note
+        elif conditions or exceptions or context.referenced_sections:
             legal_precision_note = "Important conditions, exceptions, or cross-references apply to this clause and should be read with the original text."
 
-        questions_to_ask = self._questions(clause_type, money_terms, deadlines, exceptions, context.referenced_sections)
+        questions_to_ask = self._questions(clause_type, money_terms, deadlines, exceptions, context.referenced_sections, policy)
 
         return ClauseExtraction(
             title=title,
@@ -111,9 +118,17 @@ class HeuristicClauseExtractor:
         exceptions: list[str],
         money_terms: list[str],
     ) -> tuple[RiskLevel, str | None]:
+        policy = get_clause_policy(clause_type)
         lowered = text.lower()
-        if clause_type in {"liability", "indemnity", "termination", "ip"}:
-            return RiskLevel.HIGH, "This is a high-impact clause that can materially affect rights, liability, or exit terms."
+
+        if policy:
+            level = RiskLevel(policy.risk_level)
+            reason = policy.base_reason
+            matched = [trigger for trigger in policy.review_triggers if trigger in lowered]
+            if matched:
+                reason = f"{reason} Trigger terms detected: {', '.join(matched[:3])}."
+            return level, reason
+
         if money_terms or "automatic renewal" in lowered or obligations:
             return RiskLevel.MEDIUM, "This clause contains obligations, payments, or business terms that should be reviewed carefully."
         if exceptions:
@@ -138,6 +153,7 @@ class HeuristicClauseExtractor:
         deadlines: list[str],
         money_terms: list[str],
         context: ClauseContext,
+        policy,
     ) -> str:
         parts = [f"This clause is about {title.lower()}."]
         if obligations:
@@ -154,6 +170,8 @@ class HeuristicClauseExtractor:
             parts.append("Some defined terms in this clause may change how it should be read.")
         if context.referenced_sections:
             parts.append("It refers to other sections that may affect the full legal meaning.")
+        if policy and policy.required_focus:
+            parts.append(f"Review should focus on {', '.join(policy.required_focus[:3])}.")
         return " ".join(parts)
 
     def _questions(
@@ -163,11 +181,12 @@ class HeuristicClauseExtractor:
         deadlines: list[str],
         exceptions: list[str],
         referenced_sections: list[str],
+        policy,
     ) -> list[str]:
         questions: list[str] = []
-        if clause_type in {"liability", "indemnity", "termination", "ip"}:
-            questions.append("Does this clause shift unusually high risk to one side?")
-        if money_terms:
+        if policy:
+            questions.extend(policy.review_questions)
+        if money_terms and clause_type != "payment":
             questions.append("Are the payment amounts, triggers, and penalties acceptable?")
         if deadlines:
             questions.append("Can all deadlines in this clause realistically be met?")
@@ -175,4 +194,18 @@ class HeuristicClauseExtractor:
             questions.append("Do the exceptions significantly narrow the protection or right described here?")
         if referenced_sections:
             questions.append("Do the referenced sections change the meaning of this clause in an important way?")
-        return questions
+        return self._unique(questions)
+
+    def _policy_warnings(self, text: str, triggers: tuple[str, ...]) -> list[str]:
+        lowered = text.lower()
+        matched = [trigger for trigger in triggers if trigger in lowered]
+        if not matched:
+            return []
+        return [f"Review trigger detected: {trigger}." for trigger in matched[:3]]
+
+    def _unique(self, values: list[str]) -> list[str]:
+        output: list[str] = []
+        for value in values:
+            if value and value not in output:
+                output.append(value)
+        return output
