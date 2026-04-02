@@ -3,9 +3,78 @@ import os
 import time
 from typing import Any
 
-import google.generativeai as genai
+try:
+    from google import genai as google_genai
+    from google.genai import types as google_genai_types
+except ImportError:
+    google_genai = None
+    google_genai_types = None
+
+try:
+    import google.generativeai as legacy_genai
+except ImportError:
+    legacy_genai = None
 
 from ...domain.models import ClauseExtraction, DocumentMetadata, RiskLevel
+
+
+CLAUSE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "propertyOrdering": [
+        "title",
+        "clause_type",
+        "defined_terms_used",
+        "obligations",
+        "rights",
+        "conditions",
+        "exceptions",
+        "deadlines",
+        "money_terms",
+        "plain_english",
+        "legal_precision_note",
+        "questions_to_ask",
+        "risk_level",
+        "risk_reason",
+        "confidence",
+        "missing_context",
+    ],
+    "properties": {
+        "title": {"type": "string"},
+        "clause_type": {"type": "string"},
+        "defined_terms_used": {"type": "array", "items": {"type": "string"}},
+        "obligations": {"type": "array", "items": {"type": "string"}},
+        "rights": {"type": "array", "items": {"type": "string"}},
+        "conditions": {"type": "array", "items": {"type": "string"}},
+        "exceptions": {"type": "array", "items": {"type": "string"}},
+        "deadlines": {"type": "array", "items": {"type": "string"}},
+        "money_terms": {"type": "array", "items": {"type": "string"}},
+        "plain_english": {"type": "string"},
+        "legal_precision_note": {"type": ["string", "null"]},
+        "questions_to_ask": {"type": "array", "items": {"type": "string"}},
+        "risk_level": {"type": "string", "enum": ["low", "medium", "high"]},
+        "risk_reason": {"type": ["string", "null"]},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "missing_context": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": [
+        "title",
+        "clause_type",
+        "defined_terms_used",
+        "obligations",
+        "rights",
+        "conditions",
+        "exceptions",
+        "deadlines",
+        "money_terms",
+        "plain_english",
+        "legal_precision_note",
+        "questions_to_ask",
+        "risk_level",
+        "risk_reason",
+        "confidence",
+        "missing_context",
+    ],
+}
 
 
 class GeminiAdapter:
@@ -20,18 +89,29 @@ class GeminiAdapter:
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.model_name = model_name
         self.max_retries = max_retries
-        self.model = None
+        self.client = None
+        self.legacy_model = None
+        self.backend = "none"
 
-        if self.api_key:
-            genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel(model_name)
+        if not self.api_key:
+            return
+
+        if google_genai is not None:
+            self.client = google_genai.Client(api_key=self.api_key)
+            self.backend = "google-genai"
+            return
+
+        if legacy_genai is not None:
+            legacy_genai.configure(api_key=self.api_key)
+            self.legacy_model = legacy_genai.GenerativeModel(model_name)
+            self.backend = "google-generativeai"
 
     def is_available(self) -> bool:
-        return self.model is not None
+        return self.client is not None or self.legacy_model is not None
 
     def extract_clause(self, text: str, metadata: DocumentMetadata, source_location: str) -> ClauseExtraction:
         if not self.is_available():
-            raise RuntimeError("The configured model provider is unavailable. Set GEMINI_API_KEY to enable clause extraction.")
+            raise RuntimeError("The configured model provider is unavailable. Set GEMINI_API_KEY and install a supported Gemini SDK to enable clause extraction.")
 
         prompt = self._build_prompt(text, metadata, source_location)
         payload = self._generate_payload(prompt)
@@ -61,11 +141,11 @@ class GeminiAdapter:
         last_error: Exception | None = None
         for attempt in range(self.max_retries + 1):
             try:
-                response = self.model.generate_content(prompt)
-                text = getattr(response, "text", None)
-                if not text:
-                    raise RuntimeError("The model returned an empty response.")
-                return self._load_json(text)
+                if self.client is not None:
+                    return self._generate_with_current_sdk(prompt)
+                if self.legacy_model is not None:
+                    return self._generate_with_legacy_sdk(prompt)
+                raise RuntimeError("No Gemini SDK is available.")
             except Exception as exc:
                 last_error = exc
                 if attempt >= self.max_retries:
@@ -73,50 +153,55 @@ class GeminiAdapter:
                 time.sleep(0.6 * (attempt + 1))
         raise RuntimeError("The model could not produce a reliable structured extraction.") from last_error
 
+    def _generate_with_current_sdk(self, prompt: str) -> dict[str, Any]:
+        response = self.client.models.generate_content(
+            model=self.model_name,
+            contents=prompt,
+            config=google_genai_types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_json_schema=CLAUSE_SCHEMA,
+                temperature=0.2,
+            ),
+        )
+        text = getattr(response, "text", None)
+        if not text:
+            raise RuntimeError("The model returned an empty response.")
+        return self._load_json(text)
+
+    def _generate_with_legacy_sdk(self, prompt: str) -> dict[str, Any]:
+        response = self.legacy_model.generate_content(prompt)
+        text = getattr(response, "text", None)
+        if not text:
+            raise RuntimeError("The model returned an empty response.")
+        return self._load_json(self._strip_code_fence(text))
+
     def _build_prompt(self, text: str, metadata: DocumentMetadata, source_location: str) -> str:
         return (
             "You are a legal document accessibility assistant. "
-            "Your job is to explain legal clauses in plain language while preserving legal nuance. "
-            "Do not provide legal advice. Extract obligations, rights, conditions, exceptions, deadlines, and money terms. "
-            "If context is missing, say so explicitly instead of guessing.\n\n"
-            "Return JSON only with this schema:\n"
-            "{\n"
-            '  "title": string,\n'
-            '  "clause_type": string,\n'
-            '  "defined_terms_used": string[],\n'
-            '  "obligations": string[],\n'
-            '  "rights": string[],\n'
-            '  "conditions": string[],\n'
-            '  "exceptions": string[],\n'
-            '  "deadlines": string[],\n'
-            '  "money_terms": string[],\n'
-            '  "plain_english": string,\n'
-            '  "legal_precision_note": string | null,\n'
-            '  "questions_to_ask": string[],\n'
-            '  "risk_level": "low" | "medium" | "high",\n'
-            '  "risk_reason": string | null,\n'
-            '  "confidence": number,\n'
-            '  "missing_context": string[]\n'
-            "}\n\n"
+            "Explain legal clauses in plain language while preserving legal nuance. "
+            "Do not provide legal advice. Extract obligations, rights, conditions, exceptions, deadlines, money terms, and missing context. "
+            "If information is uncertain or depends on other sections, say so explicitly.\n\n"
+            "Return JSON only matching the requested extraction fields.\n\n"
             f"Document type: {metadata.document_type}\n"
             f"Governing law: {metadata.governing_law or 'unknown'}\n"
             f"OCR quality: {metadata.ocr_quality}\n"
             f"Document warnings: {metadata.warnings or ['none']}\n"
             f"Source location: {source_location}\n\n"
-            "Preserve legal nuance. Pay close attention to negations, conditions, exceptions, deadlines, money, one-sided rights, and references to other sections.\n\n"
+            "Preserve negations, exceptions, deadlines, cross-references, one-sided rights, and payment details.\n\n"
             f"Clause:\n{text}"
         )
 
-    def _load_json(self, text: str) -> dict[str, Any]:
+    def _strip_code_fence(self, text: str) -> str:
         payload = text.strip()
         if payload.startswith("```"):
             payload = payload.split("```", 2)[1]
             if payload.startswith("json"):
                 payload = payload[4:]
-        payload = payload.strip()
+        return payload.strip()
 
+    def _load_json(self, text: str) -> dict[str, Any]:
         try:
-            return json.loads(payload)
+            return json.loads(text)
         except json.JSONDecodeError as exc:
             raise RuntimeError("The model returned invalid structured output.") from exc
 
