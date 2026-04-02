@@ -1,7 +1,23 @@
 import hashlib
 import json
-from .models import Clause, RiskLevel, SimplificationRequest, SimplificationResult
-from .ports import PdfReaderPort, ModelPort, CachePort
+import re
+
+from .models import Clause, DocumentMetadata, RiskLevel, SimplificationRequest, SimplificationResult
+from .ports import CachePort, ModelPort, PdfReaderPort
+from .segmenter import ClauseSegmenter, extract_defined_terms
+from .verifier import ClauseVerifier
+
+
+DOCUMENT_PATTERNS = {
+    "nda": ("confidential information", "non-disclosure", "receiving party"),
+    "employment_agreement": ("employee", "employer", "employment", "termination"),
+    "lease": ("landlord", "tenant", "premises", "rent"),
+    "saas_terms": ("service", "subscription", "license", "uptime"),
+    "contractor_agreement": ("contractor", "independent contractor", "statement of work"),
+    "privacy_policy": ("personal data", "privacy policy", "cookies", "data subject"),
+}
+
+GOVERNING_LAW_RE = re.compile(r"governed by the laws of ([A-Za-z ,]+)", re.IGNORECASE)
 
 
 class SimplifierService:
@@ -9,61 +25,148 @@ class SimplifierService:
         self.reader = reader
         self.model = model
         self.cache = cache
+        self.segmenter = ClauseSegmenter()
+        self.verifier = ClauseVerifier()
 
     def simplify(self, request: SimplificationRequest) -> SimplificationResult:
         text = self.reader.extract(request.pdf_bytes)
-        chunks = self._chunk(text, self.model.max_input_length)
+        if not text.strip():
+            raise ValueError("No readable text was found in the uploaded PDF.")
 
-        clauses = []
-        for chunk in chunks:
-            key = hashlib.sha256(chunk.encode()).hexdigest()
+        metadata = self._classify_document(text)
+        segments = self.segmenter.segment(text, self.model.max_input_length)
 
-            cached = self.cache.get(key)
+        clauses: list[Clause] = []
+        for segment in segments:
+            cache_key = self._cache_key(segment.text, metadata.document_type)
+            cached = self.cache.get(cache_key)
+
             if cached:
-                data = json.loads(cached)
-                clause = Clause(
-                    title=data["title"],
-                    original=chunk,
-                    simplified=data["simplified"],
-                    risk_level=RiskLevel(data["risk_level"]),
-                    risk_reason=data["risk_reason"],
-                )
+                clause = self._clause_from_cache(json.loads(cached), segment.text)
             else:
-                output = self.model.simplify(chunk)
-                clause = Clause(
-                    title=output.title,
-                    original=chunk,
-                    simplified=output.simplified,
-                    risk_level=output.risk_level,
-                    risk_reason=output.risk_reason,
-                )
-                self.cache.set(key, json.dumps({
-                    "title": output.title,
-                    "simplified": output.simplified,
-                    "risk_level": output.risk_level.value,
-                    "risk_reason": output.risk_reason,
-                }))
+                extraction = self.model.extract_clause(segment.text, metadata, segment.source_location)
+                extraction.defined_terms_used = extraction.defined_terms_used or extract_defined_terms(segment.text)
+                confidence, warnings = self.verifier.verify(extraction)
+                extraction.confidence = confidence
+                extraction.missing_context.extend(warnings)
+                clause = self._render_clause(extraction)
+                self.cache.set(cache_key, json.dumps(self._clause_to_cache_payload(clause)))
 
             clauses.append(clause)
 
-        return SimplificationResult(clauses=clauses)
+        return SimplificationResult(clauses=clauses, metadata=metadata)
 
-    def _chunk(self, text: str, max_length: int) -> list[str]:
-        words = text.split()
-        chunks = []
-        current = []
-        current_length = 0
+    def _classify_document(self, text: str) -> DocumentMetadata:
+        lowered = text.lower()
+        document_type = "other"
+        best_score = 0
 
-        for word in words:
-            if current_length + len(word) + 1 > max_length:
-                chunks.append(" ".join(current))
-                current = [word]
-                current_length = len(word)
-            else:
-                current.append(word)
-                current_length += len(word) + 1
+        for candidate, markers in DOCUMENT_PATTERNS.items():
+            score = sum(1 for marker in markers if marker in lowered)
+            if score > best_score:
+                best_score = score
+                document_type = candidate
 
-        if current:
-            chunks.append(" ".join(current))
+        warnings: list[str] = []
+        is_partial = False
 
-        return chunks
+        if "page 1 of" in lowered and "signature" not in lowered:
+            warnings.append("The document may be incomplete.")
+            is_partial = True
+
+        if len(text.split()) < 80:
+            warnings.append("Very little text was extracted from the PDF.")
+
+        ocr_quality = "good"
+        if any(token in text for token in ["�", "  ", "...."]) or len(re.findall(r"[A-Za-z]", text)) < len(text) * 0.5:
+            ocr_quality = "needs_review"
+            warnings.append("The extracted text may contain OCR issues.")
+
+        governing_law_match = GOVERNING_LAW_RE.search(text)
+        governing_law = governing_law_match.group(1).strip(" .,") if governing_law_match else None
+
+        return DocumentMetadata(
+            document_type=document_type,
+            governing_law=governing_law,
+            is_partial=is_partial,
+            ocr_quality=ocr_quality,
+            warnings=warnings,
+        )
+
+    def _render_clause(self, extraction) -> Clause:
+        simplified = extraction.plain_english
+        if extraction.legal_precision_note:
+            simplified = f"{simplified}\n\nPrecision note: {extraction.legal_precision_note}"
+
+        risk_reason = extraction.risk_reason
+        if extraction.missing_context:
+            note = " ".join(extraction.missing_context)
+            risk_reason = f"{risk_reason} {note}".strip() if risk_reason else note
+
+        return Clause(
+            title=extraction.title,
+            original=extraction.source_text,
+            simplified=simplified,
+            risk_level=extraction.risk_level,
+            risk_reason=risk_reason,
+            source_location=extraction.source_location,
+            clause_type=extraction.clause_type,
+            confidence=extraction.confidence,
+            plain_english=extraction.plain_english,
+            legal_precision_note=extraction.legal_precision_note,
+            what_you_must_do=extraction.obligations,
+            what_the_other_side_can_do=extraction.rights,
+            important_exceptions=extraction.exceptions,
+            deadlines=extraction.deadlines,
+            money_terms=extraction.money_terms,
+            defined_terms_used=extraction.defined_terms_used,
+            questions_to_ask=extraction.questions_to_ask,
+            missing_context=extraction.missing_context,
+        )
+
+    def _cache_key(self, text: str, document_type: str) -> str:
+        return hashlib.sha256(f"{document_type}:{text}".encode()).hexdigest()
+
+    def _clause_to_cache_payload(self, clause: Clause) -> dict:
+        return {
+            "title": clause.title,
+            "original": clause.original,
+            "simplified": clause.simplified,
+            "risk_level": clause.risk_level.value,
+            "risk_reason": clause.risk_reason,
+            "source_location": clause.source_location,
+            "clause_type": clause.clause_type,
+            "confidence": clause.confidence,
+            "plain_english": clause.plain_english,
+            "legal_precision_note": clause.legal_precision_note,
+            "what_you_must_do": clause.what_you_must_do,
+            "what_the_other_side_can_do": clause.what_the_other_side_can_do,
+            "important_exceptions": clause.important_exceptions,
+            "deadlines": clause.deadlines,
+            "money_terms": clause.money_terms,
+            "defined_terms_used": clause.defined_terms_used,
+            "questions_to_ask": clause.questions_to_ask,
+            "missing_context": clause.missing_context,
+        }
+
+    def _clause_from_cache(self, data: dict, fallback_original: str) -> Clause:
+        return Clause(
+            title=data["title"],
+            original=data.get("original", fallback_original),
+            simplified=data["simplified"],
+            risk_level=RiskLevel(data["risk_level"]),
+            risk_reason=data.get("risk_reason"),
+            source_location=data.get("source_location"),
+            clause_type=data.get("clause_type"),
+            confidence=data.get("confidence"),
+            plain_english=data.get("plain_english"),
+            legal_precision_note=data.get("legal_precision_note"),
+            what_you_must_do=data.get("what_you_must_do", []),
+            what_the_other_side_can_do=data.get("what_the_other_side_can_do", []),
+            important_exceptions=data.get("important_exceptions", []),
+            deadlines=data.get("deadlines", []),
+            money_terms=data.get("money_terms", []),
+            defined_terms_used=data.get("defined_terms_used", []),
+            questions_to_ask=data.get("questions_to_ask", []),
+            missing_context=data.get("missing_context", []),
+        )

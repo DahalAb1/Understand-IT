@@ -1,5 +1,6 @@
 from typing import Protocol
-from .models import SimplificationRequest, SimplificationResult, ModelOutput
+
+from .models import ClauseExtraction, DocumentMetadata, SimplificationRequest, SimplificationResult
 
 
 class PdfReaderPort(Protocol):
@@ -10,7 +11,7 @@ class PdfReaderPort(Protocol):
 class ModelPort(Protocol):
     max_input_length: int
 
-    def simplify(self, text: str) -> ModelOutput:
+    def extract_clause(self, text: str, metadata: DocumentMetadata, source_location: str) -> ClauseExtraction:
         ...
 
 

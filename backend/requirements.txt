@@ -1,5 +1,6 @@
 fastapi
 uvicorn
+google-generativeai
 anthropic
 pypdf
 python-dotenv
