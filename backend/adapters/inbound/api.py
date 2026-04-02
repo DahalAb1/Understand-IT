@@ -32,6 +32,16 @@ def create_router(simplifier: SimplifierPort) -> APIRouter:
                 "ocr_quality": result.metadata.ocr_quality,
                 "warnings": result.metadata.warnings,
             },
+            "summary": {
+                "plain_language_overview": result.summary.plain_language_overview,
+                "total_clauses": result.summary.total_clauses,
+                "risk_counts": result.summary.risk_counts,
+                "top_risks": result.summary.top_risks,
+                "key_obligations": result.summary.key_obligations,
+                "key_deadlines": result.summary.key_deadlines,
+                "key_money_terms": result.summary.key_money_terms,
+                "sections_requiring_review": result.summary.sections_requiring_review,
+            },
             "clauses": [
                 {
                     "title": clause.title,

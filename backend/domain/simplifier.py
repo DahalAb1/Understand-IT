@@ -4,7 +4,16 @@ import re
 
 from .context_builder import DocumentContextBuilder
 from .heuristics import HeuristicClauseExtractor
-from .models import Clause, ClauseExtraction, DocumentContext, DocumentMetadata, RiskLevel, SimplificationRequest, SimplificationResult
+from .models import (
+    Clause,
+    ClauseExtraction,
+    DocumentContext,
+    DocumentMetadata,
+    DocumentSummary,
+    RiskLevel,
+    SimplificationRequest,
+    SimplificationResult,
+)
 from .ports import CachePort, ModelPort, PdfReaderPort
 from .segmenter import ClauseSegment, ClauseSegmenter, extract_defined_terms
 from .verifier import ClauseVerifier
@@ -73,7 +82,8 @@ class SimplifierService:
 
             clauses.append(clause)
 
-        return SimplificationResult(clauses=clauses, metadata=metadata)
+        summary = self._build_summary(clauses, metadata)
+        return SimplificationResult(clauses=clauses, metadata=metadata, summary=summary)
 
     def _extract_segment(
         self,
@@ -194,6 +204,66 @@ class SimplifierService:
             referenced_sections=segment.referenced_sections,
         )
 
+    def _build_summary(self, clauses: list[Clause], metadata: DocumentMetadata) -> DocumentSummary:
+        risk_counts = {
+            "high": sum(1 for clause in clauses if clause.risk_level == RiskLevel.HIGH),
+            "medium": sum(1 for clause in clauses if clause.risk_level == RiskLevel.MEDIUM),
+            "low": sum(1 for clause in clauses if clause.risk_level == RiskLevel.LOW),
+        }
+
+        top_risks = self._unique(
+            clause.risk_reason
+            for clause in clauses
+            if clause.risk_level == RiskLevel.HIGH and clause.risk_reason
+        )[:5]
+
+        key_obligations = self._unique(
+            obligation
+            for clause in clauses
+            for obligation in clause.what_you_must_do
+        )[:8]
+
+        key_deadlines = self._unique(
+            deadline
+            for clause in clauses
+            for deadline in clause.deadlines
+        )[:8]
+
+        key_money_terms = self._unique(
+            money_term
+            for clause in clauses
+            for money_term in clause.money_terms
+        )[:8]
+
+        sections_requiring_review = self._unique(
+            clause.source_location
+            for clause in clauses
+            if clause.risk_level == RiskLevel.HIGH or clause.confidence is not None and clause.confidence < 0.55
+        )[:8]
+
+        overview_parts = [
+            f"This {metadata.document_type.replace('_', ' ')} contains {len(clauses)} analyzed clause{'s' if len(clauses) != 1 else ''}.",
+        ]
+        if risk_counts["high"]:
+            overview_parts.append(f"{risk_counts['high']} clause{'s' if risk_counts['high'] != 1 else ''} appear high risk.")
+        if key_obligations:
+            overview_parts.append("The document creates concrete obligations that should be reviewed closely.")
+        if key_deadlines:
+            overview_parts.append("It also includes timing requirements.")
+        if metadata.warnings:
+            overview_parts.append("Some document-quality warnings may affect interpretation.")
+
+        return DocumentSummary(
+            plain_language_overview=" ".join(overview_parts),
+            total_clauses=len(clauses),
+            risk_counts=risk_counts,
+            top_risks=top_risks,
+            key_obligations=key_obligations,
+            key_deadlines=key_deadlines,
+            key_money_terms=key_money_terms,
+            sections_requiring_review=sections_requiring_review,
+        )
+
     def _cache_key(self, text: str, document_type: str) -> str:
         return hashlib.sha256(f"{document_type}:{text}".encode()).hexdigest()
 
@@ -250,3 +320,10 @@ class SimplifierService:
             if cleaned and cleaned not in merged:
                 merged.append(cleaned)
         return merged
+
+    def _unique(self, values) -> list[str]:
+        output: list[str] = []
+        for value in values:
+            if value and value not in output:
+                output.append(value)
+        return output

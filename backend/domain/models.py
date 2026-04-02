@@ -96,6 +96,18 @@ class Clause:
 
 
 @dataclass
+class DocumentSummary:
+    plain_language_overview: str
+    total_clauses: int
+    risk_counts: dict[str, int] = field(default_factory=dict)
+    top_risks: list[str] = field(default_factory=list)
+    key_obligations: list[str] = field(default_factory=list)
+    key_deadlines: list[str] = field(default_factory=list)
+    key_money_terms: list[str] = field(default_factory=list)
+    sections_requiring_review: list[str] = field(default_factory=list)
+
+
+@dataclass
 class SimplificationRequest:
     pdf_bytes: bytes
 
@@ -104,3 +116,4 @@ class SimplificationRequest:
 class SimplificationResult:
     clauses: list[Clause]
     metadata: DocumentMetadata
+    summary: DocumentSummary
