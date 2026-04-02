@@ -2,7 +2,8 @@ import hashlib
 import json
 import re
 
-from .models import Clause, DocumentMetadata, RiskLevel, SimplificationRequest, SimplificationResult
+from .heuristics import HeuristicClauseExtractor
+from .models import Clause, ClauseExtraction, DocumentMetadata, RiskLevel, SimplificationRequest, SimplificationResult
 from .ports import CachePort, ModelPort, PdfReaderPort
 from .segmenter import ClauseSegmenter, extract_defined_terms
 from .verifier import ClauseVerifier
@@ -17,6 +18,20 @@ DOCUMENT_PATTERNS = {
     "privacy_policy": ("personal data", "privacy policy", "cookies", "data subject"),
 }
 
+HIGH_RISK_KEYWORDS = (
+    "indemnify",
+    "limitation of liability",
+    "consequential damages",
+    "arbitration",
+    "terminate",
+    "termination",
+    "governing law",
+    "auto-renew",
+    "intellectual property",
+    "assign all right",
+    "personal guarantee",
+)
+
 GOVERNING_LAW_RE = re.compile(r"governed by the laws of ([A-Za-z ,]+)", re.IGNORECASE)
 
 
@@ -27,6 +42,7 @@ class SimplifierService:
         self.cache = cache
         self.segmenter = ClauseSegmenter()
         self.verifier = ClauseVerifier()
+        self.fallback_model = HeuristicClauseExtractor()
 
     def simplify(self, request: SimplificationRequest) -> SimplificationResult:
         text = self.reader.extract(request.pdf_bytes)
@@ -44,17 +60,54 @@ class SimplifierService:
             if cached:
                 clause = self._clause_from_cache(json.loads(cached), segment.text)
             else:
-                extraction = self.model.extract_clause(segment.text, metadata, segment.source_location)
+                extraction = self._extract_segment(segment.text, metadata, segment.source_location)
                 extraction.defined_terms_used = extraction.defined_terms_used or extract_defined_terms(segment.text)
                 confidence, warnings = self.verifier.verify(extraction)
                 extraction.confidence = confidence
-                extraction.missing_context.extend(warnings)
+                extraction.missing_context = self._merge_unique(extraction.missing_context, warnings)
                 clause = self._render_clause(extraction)
                 self.cache.set(cache_key, json.dumps(self._clause_to_cache_payload(clause)))
 
             clauses.append(clause)
 
         return SimplificationResult(clauses=clauses, metadata=metadata)
+
+    def _extract_segment(self, text: str, metadata: DocumentMetadata, source_location: str) -> ClauseExtraction:
+        prefer_primary = self.model.is_available() and self._should_use_primary_model(text)
+
+        if prefer_primary:
+            try:
+                extraction = self.model.extract_clause(text, metadata, source_location)
+                extraction.missing_context = self._merge_unique(
+                    extraction.missing_context,
+                    self._context_warnings(metadata, extraction.defined_terms_used),
+                )
+                return extraction
+            except RuntimeError:
+                pass
+
+        extraction = self.fallback_model.extract_clause(text, metadata, source_location)
+        extraction.missing_context = self._merge_unique(
+            extraction.missing_context,
+            self._context_warnings(metadata, extraction.defined_terms_used),
+        )
+        return extraction
+
+    def _should_use_primary_model(self, text: str) -> bool:
+        lowered = text.lower()
+        if any(keyword in lowered for keyword in HIGH_RISK_KEYWORDS):
+            return True
+        if len(text) > 900:
+            return True
+        if lowered.count("provided that") + lowered.count("subject to") + lowered.count("unless") >= 2:
+            return True
+        return False
+
+    def _context_warnings(self, metadata: DocumentMetadata, defined_terms: list[str]) -> list[str]:
+        warnings = list(metadata.warnings)
+        if defined_terms:
+            warnings.append("Defined terms may depend on other sections of the document.")
+        return warnings
 
     def _classify_document(self, text: str) -> DocumentMetadata:
         lowered = text.lower()
@@ -93,7 +146,7 @@ class SimplifierService:
             warnings=warnings,
         )
 
-    def _render_clause(self, extraction) -> Clause:
+    def _render_clause(self, extraction: ClauseExtraction) -> Clause:
         simplified = extraction.plain_english
         if extraction.legal_precision_note:
             simplified = f"{simplified}\n\nPrecision note: {extraction.legal_precision_note}"
@@ -170,3 +223,11 @@ class SimplifierService:
             questions_to_ask=data.get("questions_to_ask", []),
             missing_context=data.get("missing_context", []),
         )
+
+    def _merge_unique(self, base: list[str], extra: list[str]) -> list[str]:
+        merged: list[str] = []
+        for item in [*base, *extra]:
+            cleaned = item.strip()
+            if cleaned and cleaned not in merged:
+                merged.append(cleaned)
+        return merged

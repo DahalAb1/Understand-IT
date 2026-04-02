@@ -23,7 +23,11 @@ app.add_middleware(
 
 simplifier = SimplifierService(
     reader=PypdfReaderAdapter(),
-    model=GeminiAdapter(api_key=settings.gemini_api_key),
+    model=GeminiAdapter(
+        api_key=settings.gemini_api_key,
+        model_name=settings.gemini_model,
+        max_retries=settings.model_max_retries,
+    ),
     cache=SqliteCacheAdapter(db_path=settings.cache_path),
 )
 

@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from typing import Any
 
 import google.generativeai as genai
@@ -10,22 +11,30 @@ from ...domain.models import ClauseExtraction, DocumentMetadata, RiskLevel
 class GeminiAdapter:
     max_input_length = 4000
 
-    def __init__(self, api_key: str | None = None, model_name: str = "gemini-2.0-flash"):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model_name: str = "gemini-2.0-flash",
+        max_retries: int = 2,
+    ):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.model_name = model_name
+        self.max_retries = max_retries
         self.model = None
 
         if self.api_key:
             genai.configure(api_key=self.api_key)
             self.model = genai.GenerativeModel(model_name)
 
+    def is_available(self) -> bool:
+        return self.model is not None
+
     def extract_clause(self, text: str, metadata: DocumentMetadata, source_location: str) -> ClauseExtraction:
-        if self.model is None:
+        if not self.is_available():
             raise RuntimeError("The configured model provider is unavailable. Set GEMINI_API_KEY to enable clause extraction.")
 
         prompt = self._build_prompt(text, metadata, source_location)
-        response = self.model.generate_content(prompt)
-        payload = self._load_json(response.text)
+        payload = self._generate_payload(prompt)
 
         return ClauseExtraction(
             title=self._as_string(payload, "title", fallback="Untitled Clause"),
@@ -47,6 +56,22 @@ class GeminiAdapter:
             confidence=self._as_confidence(payload.get("confidence")),
             missing_context=self._as_list(payload, "missing_context"),
         )
+
+    def _generate_payload(self, prompt: str) -> dict[str, Any]:
+        last_error: Exception | None = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = self.model.generate_content(prompt)
+                text = getattr(response, "text", None)
+                if not text:
+                    raise RuntimeError("The model returned an empty response.")
+                return self._load_json(text)
+            except Exception as exc:
+                last_error = exc
+                if attempt >= self.max_retries:
+                    break
+                time.sleep(0.6 * (attempt + 1))
+        raise RuntimeError("The model could not produce a reliable structured extraction.") from last_error
 
     def _build_prompt(self, text: str, metadata: DocumentMetadata, source_location: str) -> str:
         return (
@@ -78,7 +103,7 @@ class GeminiAdapter:
             f"OCR quality: {metadata.ocr_quality}\n"
             f"Document warnings: {metadata.warnings or ['none']}\n"
             f"Source location: {source_location}\n\n"
-            "Preserve legal nuance. Pay close attention to negations, conditions, exceptions, deadlines, money, and one-sided rights.\n\n"
+            "Preserve legal nuance. Pay close attention to negations, conditions, exceptions, deadlines, money, one-sided rights, and references to other sections.\n\n"
             f"Clause:\n{text}"
         )
 

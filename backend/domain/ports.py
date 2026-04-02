@@ -14,6 +14,9 @@ class ModelPort(Protocol):
     def extract_clause(self, text: str, metadata: DocumentMetadata, source_location: str) -> ClauseExtraction:
         ...
 
+    def is_available(self) -> bool:
+        ...
+
 
 class CachePort(Protocol):
     def get(self, key: str) -> str | None:
