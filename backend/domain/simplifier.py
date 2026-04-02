@@ -7,9 +7,11 @@ from .heuristics import HeuristicClauseExtractor
 from .models import (
     Clause,
     ClauseExtraction,
+    ClauseTrace,
     DocumentContext,
     DocumentMetadata,
     DocumentSummary,
+    DocumentTrace,
     ExtractedDocument,
     RiskLevel,
     SimplificationRequest,
@@ -66,6 +68,7 @@ class SimplifierService:
         metadata = self._classify_document(text, extracted)
         segments = self.segmenter.segment(text, self.model.max_input_length)
         document_context = self.context_builder.build(segments)
+        clause_traces: list[ClauseTrace] = []
 
         clauses: list[Clause] = []
         for segment in segments:
@@ -74,28 +77,59 @@ class SimplifierService:
 
             if cached:
                 clause = self._clause_from_cache(json.loads(cached), segment.text)
+                if clause.trace is None:
+                    clause.trace = ClauseTrace(
+                        source_location=segment.source_location,
+                        route="cache",
+                        policy_applied=clause.clause_type if clause.clause_type and get_clause_policy(clause.clause_type) else None,
+                        warnings=[],
+                        confidence_after_verification=clause.confidence,
+                    )
             else:
-                extraction = self._extract_segment(segment, metadata, document_context)
+                extraction, trace = self._extract_segment(segment, metadata, document_context)
                 extraction.defined_terms_used = extraction.defined_terms_used or extract_defined_terms(segment.text)
+                trace.confidence_before_verification = extraction.confidence
                 confidence, warnings = self.verifier.verify(extraction)
                 extraction.confidence = confidence
                 extraction.missing_context = self._merge_unique(extraction.missing_context, warnings)
-                clause = self._render_clause(extraction, segment)
+                trace.confidence_after_verification = confidence
+                trace.warnings = self._merge_unique(trace.warnings, warnings)
+                clause = self._render_clause(extraction, segment, trace)
                 self.cache.set(cache_key, json.dumps(self._clause_to_cache_payload(clause)))
 
             clauses.append(clause)
+            if clause.trace is not None:
+                clause_traces.append(clause.trace)
 
         summary = self._build_summary(clauses, metadata)
-        return SimplificationResult(clauses=clauses, metadata=metadata, summary=summary)
+        document_trace = DocumentTrace(
+            extraction_method=metadata.extraction_method,
+            ocr_attempted=metadata.ocr_attempted,
+            ocr_available=metadata.ocr_available,
+            ocr_quality=metadata.ocr_quality,
+            warnings=list(metadata.warnings),
+            clause_traces=clause_traces,
+        )
+        return SimplificationResult(clauses=clauses, metadata=metadata, summary=summary, trace=document_trace)
 
     def _extract_segment(
         self,
         segment: ClauseSegment,
         metadata: DocumentMetadata,
         document_context: DocumentContext,
-    ) -> ClauseExtraction:
+    ) -> tuple[ClauseExtraction, ClauseTrace]:
         context = self.context_builder.context_for(segment, document_context)
+        policy_applied = None
+        route = "heuristic"
         prefer_primary = self.model.is_available() and self._should_use_primary_model(segment.text)
+
+        context_sources: list[str] = []
+        if context.parent_source_location:
+            context_sources.append(f"parent:{context.parent_source_location}")
+        if context.referenced_sections:
+            context_sources.extend(f"section:{section}" for section in context.referenced_sections)
+        if context.relevant_definitions:
+            context_sources.extend(f"definition:{definition.term}" for definition in context.relevant_definitions)
 
         if prefer_primary:
             try:
@@ -104,16 +138,44 @@ class SimplifierService:
                     extraction.missing_context,
                     self._context_warnings(metadata, extraction.defined_terms_used, context.referenced_sections),
                 )
-                return extraction
-            except RuntimeError:
-                pass
+                policy_applied = extraction.clause_type if get_clause_policy(extraction.clause_type) else None
+                route = "primary_model"
+                return extraction, ClauseTrace(
+                    source_location=segment.source_location,
+                    route=route,
+                    policy_applied=policy_applied,
+                    used_primary_model=True,
+                    used_fallback_model=False,
+                    context_sources=context_sources,
+                    warnings=list(extraction.missing_context),
+                )
+            except RuntimeError as exc:
+                context_sources.append("fallback:primary_model_failed")
+                primary_warning = str(exc)
+            else:
+                primary_warning = None
+        else:
+            primary_warning = None
 
         extraction = self.fallback_model.extract_clause(segment.text, metadata, segment.source_location, context)
         extraction.missing_context = self._merge_unique(
             extraction.missing_context,
             self._context_warnings(metadata, extraction.defined_terms_used, context.referenced_sections),
         )
-        return extraction
+        policy_applied = extraction.clause_type if get_clause_policy(extraction.clause_type) else None
+        warnings = list(extraction.missing_context)
+        if primary_warning:
+            warnings.append(f"Primary model fallback: {primary_warning}")
+
+        return extraction, ClauseTrace(
+            source_location=segment.source_location,
+            route=route,
+            policy_applied=policy_applied,
+            used_primary_model=False,
+            used_fallback_model=True,
+            context_sources=context_sources,
+            warnings=warnings,
+        )
 
     def _should_use_primary_model(self, text: str) -> bool:
         lowered = text.lower()
@@ -182,7 +244,7 @@ class SimplifierService:
             warnings=self._unique(warnings),
         )
 
-    def _render_clause(self, extraction: ClauseExtraction, segment: ClauseSegment) -> Clause:
+    def _render_clause(self, extraction: ClauseExtraction, segment: ClauseSegment, trace: ClauseTrace) -> Clause:
         simplified = extraction.plain_english
         if extraction.legal_precision_note:
             simplified = f"{simplified}\n\nPrecision note: {extraction.legal_precision_note}"
@@ -212,6 +274,7 @@ class SimplifierService:
             questions_to_ask=extraction.questions_to_ask,
             missing_context=extraction.missing_context,
             referenced_sections=segment.referenced_sections,
+            trace=trace,
         )
 
     def _build_summary(self, clauses: list[Clause], metadata: DocumentMetadata) -> DocumentSummary:
@@ -308,9 +371,35 @@ class SimplifierService:
             "questions_to_ask": clause.questions_to_ask,
             "missing_context": clause.missing_context,
             "referenced_sections": clause.referenced_sections,
+            "trace": {
+                "source_location": clause.trace.source_location,
+                "route": clause.trace.route,
+                "policy_applied": clause.trace.policy_applied,
+                "used_primary_model": clause.trace.used_primary_model,
+                "used_fallback_model": clause.trace.used_fallback_model,
+                "context_sources": clause.trace.context_sources,
+                "warnings": clause.trace.warnings,
+                "confidence_before_verification": clause.trace.confidence_before_verification,
+                "confidence_after_verification": clause.trace.confidence_after_verification,
+            } if clause.trace else None,
         }
 
     def _clause_from_cache(self, data: dict, fallback_original: str) -> Clause:
+        trace_data = data.get("trace")
+        trace = None
+        if trace_data:
+            trace = ClauseTrace(
+                source_location=trace_data["source_location"],
+                route=trace_data["route"],
+                policy_applied=trace_data.get("policy_applied"),
+                used_primary_model=trace_data.get("used_primary_model", False),
+                used_fallback_model=trace_data.get("used_fallback_model", False),
+                context_sources=trace_data.get("context_sources", []),
+                warnings=trace_data.get("warnings", []),
+                confidence_before_verification=trace_data.get("confidence_before_verification"),
+                confidence_after_verification=trace_data.get("confidence_after_verification"),
+            )
+
         return Clause(
             title=data["title"],
             original=data.get("original", fallback_original),
@@ -331,6 +420,7 @@ class SimplifierService:
             questions_to_ask=data.get("questions_to_ask", []),
             missing_context=data.get("missing_context", []),
             referenced_sections=data.get("referenced_sections", []),
+            trace=trace,
         )
 
     def _merge_unique(self, base: list[str], extra: list[str]) -> list[str]:

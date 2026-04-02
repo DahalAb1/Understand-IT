@@ -6,7 +6,7 @@ from ...domain.ports import SimplifierPort
 router = APIRouter()
 
 
-def create_router(simplifier: SimplifierPort) -> APIRouter:
+def create_router(simplifier: SimplifierPort, enable_trace: bool = False) -> APIRouter:
     @router.post("/simplify")
     async def simplify(file: UploadFile = File(...)):
         if not file.filename or not file.filename.lower().endswith(".pdf"):
@@ -24,7 +24,7 @@ def create_router(simplifier: SimplifierPort) -> APIRouter:
         except Exception as exc:
             raise HTTPException(status_code=500, detail="The document could not be processed.") from exc
 
-        return {
+        response = {
             "metadata": {
                 "document_type": result.metadata.document_type,
                 "governing_law": result.metadata.governing_law,
@@ -70,5 +70,43 @@ def create_router(simplifier: SimplifierPort) -> APIRouter:
                 for clause in result.clauses
             ],
         }
+
+        if enable_trace:
+            response["trace"] = {
+                "extraction_method": result.trace.extraction_method,
+                "ocr_attempted": result.trace.ocr_attempted,
+                "ocr_available": result.trace.ocr_available,
+                "ocr_quality": result.trace.ocr_quality,
+                "warnings": result.trace.warnings,
+                "clauses": [
+                    {
+                        "source_location": trace.source_location,
+                        "route": trace.route,
+                        "policy_applied": trace.policy_applied,
+                        "used_primary_model": trace.used_primary_model,
+                        "used_fallback_model": trace.used_fallback_model,
+                        "context_sources": trace.context_sources,
+                        "warnings": trace.warnings,
+                        "confidence_before_verification": trace.confidence_before_verification,
+                        "confidence_after_verification": trace.confidence_after_verification,
+                    }
+                    for trace in result.trace.clause_traces
+                ],
+            }
+
+            for clause_payload, clause in zip(response["clauses"], result.clauses):
+                clause_payload["trace"] = {
+                    "source_location": clause.trace.source_location,
+                    "route": clause.trace.route,
+                    "policy_applied": clause.trace.policy_applied,
+                    "used_primary_model": clause.trace.used_primary_model,
+                    "used_fallback_model": clause.trace.used_fallback_model,
+                    "context_sources": clause.trace.context_sources,
+                    "warnings": clause.trace.warnings,
+                    "confidence_before_verification": clause.trace.confidence_before_verification,
+                    "confidence_after_verification": clause.trace.confidence_after_verification,
+                } if clause.trace else None
+
+        return response
 
     return router

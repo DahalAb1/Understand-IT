@@ -31,4 +31,4 @@ simplifier = SimplifierService(
     cache=SqliteCacheAdapter(db_path=settings.cache_path),
 )
 
-app.include_router(create_router(simplifier))
+app.include_router(create_router(simplifier, enable_trace=settings.enable_trace))

@@ -70,6 +70,29 @@ class ClauseSegment:
 
 
 @dataclass
+class ClauseTrace:
+    source_location: str
+    route: str
+    policy_applied: str | None = None
+    used_primary_model: bool = False
+    used_fallback_model: bool = False
+    context_sources: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    confidence_before_verification: float | None = None
+    confidence_after_verification: float | None = None
+
+
+@dataclass
+class DocumentTrace:
+    extraction_method: str
+    ocr_attempted: bool
+    ocr_available: bool
+    ocr_quality: str
+    warnings: list[str] = field(default_factory=list)
+    clause_traces: list[ClauseTrace] = field(default_factory=list)
+
+
+@dataclass
 class ClauseExtraction:
     title: str
     clause_type: str
@@ -112,6 +135,7 @@ class Clause:
     questions_to_ask: list[str] = field(default_factory=list)
     missing_context: list[str] = field(default_factory=list)
     referenced_sections: list[str] = field(default_factory=list)
+    trace: ClauseTrace | None = None
 
 
 @dataclass
@@ -136,3 +160,4 @@ class SimplificationResult:
     clauses: list[Clause]
     metadata: DocumentMetadata
     summary: DocumentSummary
+    trace: DocumentTrace
