@@ -18,11 +18,36 @@ class DocumentMetadata:
 
 
 @dataclass
+class DefinedTerm:
+    term: str
+    definition: str
+    source_location: str
+
+
+@dataclass
+class ClauseContext:
+    parent_heading: str
+    referenced_sections: list[str] = field(default_factory=list)
+    referenced_texts: list[str] = field(default_factory=list)
+    relevant_definitions: list[DefinedTerm] = field(default_factory=list)
+
+
+@dataclass
+class DocumentContext:
+    definitions: dict[str, DefinedTerm] = field(default_factory=dict)
+    sections: dict[str, str] = field(default_factory=dict)
+    cross_references: dict[str, list[str]] = field(default_factory=dict)
+
+
+@dataclass
 class ClauseSegment:
     id: str
     heading: str
     text: str
     source_location: str
+    section_number: str | None = None
+    parent_heading: str | None = None
+    referenced_sections: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -67,6 +92,7 @@ class Clause:
     defined_terms_used: list[str] = field(default_factory=list)
     questions_to_ask: list[str] = field(default_factory=list)
     missing_context: list[str] = field(default_factory=list)
+    referenced_sections: list[str] = field(default_factory=list)
 
 
 @dataclass

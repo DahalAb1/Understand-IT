@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from .models import ClauseExtraction, DocumentMetadata, SimplificationRequest, SimplificationResult
+from .models import ClauseContext, ClauseExtraction, DocumentMetadata, SimplificationRequest, SimplificationResult
 
 
 class PdfReaderPort(Protocol):
@@ -11,7 +11,13 @@ class PdfReaderPort(Protocol):
 class ModelPort(Protocol):
     max_input_length: int
 
-    def extract_clause(self, text: str, metadata: DocumentMetadata, source_location: str) -> ClauseExtraction:
+    def extract_clause(
+        self,
+        text: str,
+        metadata: DocumentMetadata,
+        source_location: str,
+        context: ClauseContext,
+    ) -> ClauseExtraction:
         ...
 
     def is_available(self) -> bool:

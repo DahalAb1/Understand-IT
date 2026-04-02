@@ -2,10 +2,11 @@ import hashlib
 import json
 import re
 
+from .context_builder import DocumentContextBuilder
 from .heuristics import HeuristicClauseExtractor
-from .models import Clause, ClauseExtraction, DocumentMetadata, RiskLevel, SimplificationRequest, SimplificationResult
+from .models import Clause, ClauseExtraction, DocumentContext, DocumentMetadata, RiskLevel, SimplificationRequest, SimplificationResult
 from .ports import CachePort, ModelPort, PdfReaderPort
-from .segmenter import ClauseSegmenter, extract_defined_terms
+from .segmenter import ClauseSegment, ClauseSegmenter, extract_defined_terms
 from .verifier import ClauseVerifier
 
 
@@ -41,6 +42,7 @@ class SimplifierService:
         self.model = model
         self.cache = cache
         self.segmenter = ClauseSegmenter()
+        self.context_builder = DocumentContextBuilder()
         self.verifier = ClauseVerifier()
         self.fallback_model = HeuristicClauseExtractor()
 
@@ -51,6 +53,7 @@ class SimplifierService:
 
         metadata = self._classify_document(text)
         segments = self.segmenter.segment(text, self.model.max_input_length)
+        document_context = self.context_builder.build(segments)
 
         clauses: list[Clause] = []
         for segment in segments:
@@ -60,36 +63,42 @@ class SimplifierService:
             if cached:
                 clause = self._clause_from_cache(json.loads(cached), segment.text)
             else:
-                extraction = self._extract_segment(segment.text, metadata, segment.source_location)
+                extraction = self._extract_segment(segment, metadata, document_context)
                 extraction.defined_terms_used = extraction.defined_terms_used or extract_defined_terms(segment.text)
                 confidence, warnings = self.verifier.verify(extraction)
                 extraction.confidence = confidence
                 extraction.missing_context = self._merge_unique(extraction.missing_context, warnings)
-                clause = self._render_clause(extraction)
+                clause = self._render_clause(extraction, segment)
                 self.cache.set(cache_key, json.dumps(self._clause_to_cache_payload(clause)))
 
             clauses.append(clause)
 
         return SimplificationResult(clauses=clauses, metadata=metadata)
 
-    def _extract_segment(self, text: str, metadata: DocumentMetadata, source_location: str) -> ClauseExtraction:
-        prefer_primary = self.model.is_available() and self._should_use_primary_model(text)
+    def _extract_segment(
+        self,
+        segment: ClauseSegment,
+        metadata: DocumentMetadata,
+        document_context: DocumentContext,
+    ) -> ClauseExtraction:
+        context = self.context_builder.context_for(segment, document_context)
+        prefer_primary = self.model.is_available() and self._should_use_primary_model(segment.text)
 
         if prefer_primary:
             try:
-                extraction = self.model.extract_clause(text, metadata, source_location)
+                extraction = self.model.extract_clause(segment.text, metadata, segment.source_location, context)
                 extraction.missing_context = self._merge_unique(
                     extraction.missing_context,
-                    self._context_warnings(metadata, extraction.defined_terms_used),
+                    self._context_warnings(metadata, extraction.defined_terms_used, context.referenced_sections),
                 )
                 return extraction
             except RuntimeError:
                 pass
 
-        extraction = self.fallback_model.extract_clause(text, metadata, source_location)
+        extraction = self.fallback_model.extract_clause(segment.text, metadata, segment.source_location, context)
         extraction.missing_context = self._merge_unique(
             extraction.missing_context,
-            self._context_warnings(metadata, extraction.defined_terms_used),
+            self._context_warnings(metadata, extraction.defined_terms_used, context.referenced_sections),
         )
         return extraction
 
@@ -103,10 +112,17 @@ class SimplifierService:
             return True
         return False
 
-    def _context_warnings(self, metadata: DocumentMetadata, defined_terms: list[str]) -> list[str]:
+    def _context_warnings(
+        self,
+        metadata: DocumentMetadata,
+        defined_terms: list[str],
+        referenced_sections: list[str],
+    ) -> list[str]:
         warnings = list(metadata.warnings)
         if defined_terms:
             warnings.append("Defined terms may depend on other sections of the document.")
+        if referenced_sections:
+            warnings.append("This clause refers to other sections that may materially affect its meaning.")
         return warnings
 
     def _classify_document(self, text: str) -> DocumentMetadata:
@@ -146,7 +162,7 @@ class SimplifierService:
             warnings=warnings,
         )
 
-    def _render_clause(self, extraction: ClauseExtraction) -> Clause:
+    def _render_clause(self, extraction: ClauseExtraction, segment: ClauseSegment) -> Clause:
         simplified = extraction.plain_english
         if extraction.legal_precision_note:
             simplified = f"{simplified}\n\nPrecision note: {extraction.legal_precision_note}"
@@ -175,6 +191,7 @@ class SimplifierService:
             defined_terms_used=extraction.defined_terms_used,
             questions_to_ask=extraction.questions_to_ask,
             missing_context=extraction.missing_context,
+            referenced_sections=segment.referenced_sections,
         )
 
     def _cache_key(self, text: str, document_type: str) -> str:
@@ -200,6 +217,7 @@ class SimplifierService:
             "defined_terms_used": clause.defined_terms_used,
             "questions_to_ask": clause.questions_to_ask,
             "missing_context": clause.missing_context,
+            "referenced_sections": clause.referenced_sections,
         }
 
     def _clause_from_cache(self, data: dict, fallback_original: str) -> Clause:
@@ -222,6 +240,7 @@ class SimplifierService:
             defined_terms_used=data.get("defined_terms_used", []),
             questions_to_ask=data.get("questions_to_ask", []),
             missing_context=data.get("missing_context", []),
+            referenced_sections=data.get("referenced_sections", []),
         )
 
     def _merge_unique(self, base: list[str], extra: list[str]) -> list[str]:

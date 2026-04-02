@@ -52,6 +52,7 @@ def create_router(simplifier: SimplifierPort) -> APIRouter:
                     "defined_terms_used": clause.defined_terms_used,
                     "questions_to_ask": clause.questions_to_ask,
                     "missing_context": clause.missing_context,
+                    "referenced_sections": clause.referenced_sections,
                 }
                 for clause in result.clauses
             ],

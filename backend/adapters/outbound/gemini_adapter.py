@@ -15,7 +15,7 @@ try:
 except ImportError:
     legacy_genai = None
 
-from ...domain.models import ClauseExtraction, DocumentMetadata, RiskLevel
+from ...domain.models import ClauseContext, ClauseExtraction, DocumentMetadata, RiskLevel
 
 
 CLAUSE_SCHEMA: dict[str, Any] = {
@@ -91,29 +91,32 @@ class GeminiAdapter:
         self.max_retries = max_retries
         self.client = None
         self.legacy_model = None
-        self.backend = "none"
 
         if not self.api_key:
             return
 
         if google_genai is not None:
             self.client = google_genai.Client(api_key=self.api_key)
-            self.backend = "google-genai"
             return
 
         if legacy_genai is not None:
             legacy_genai.configure(api_key=self.api_key)
             self.legacy_model = legacy_genai.GenerativeModel(model_name)
-            self.backend = "google-generativeai"
 
     def is_available(self) -> bool:
         return self.client is not None or self.legacy_model is not None
 
-    def extract_clause(self, text: str, metadata: DocumentMetadata, source_location: str) -> ClauseExtraction:
+    def extract_clause(
+        self,
+        text: str,
+        metadata: DocumentMetadata,
+        source_location: str,
+        context: ClauseContext,
+    ) -> ClauseExtraction:
         if not self.is_available():
             raise RuntimeError("The configured model provider is unavailable. Set GEMINI_API_KEY and install a supported Gemini SDK to enable clause extraction.")
 
-        prompt = self._build_prompt(text, metadata, source_location)
+        prompt = self._build_prompt(text, metadata, source_location, context)
         payload = self._generate_payload(prompt)
 
         return ClauseExtraction(
@@ -175,7 +178,19 @@ class GeminiAdapter:
             raise RuntimeError("The model returned an empty response.")
         return self._load_json(self._strip_code_fence(text))
 
-    def _build_prompt(self, text: str, metadata: DocumentMetadata, source_location: str) -> str:
+    def _build_prompt(
+        self,
+        text: str,
+        metadata: DocumentMetadata,
+        source_location: str,
+        context: ClauseContext,
+    ) -> str:
+        definition_lines = [
+            f'- "{definition.term}": {definition.definition} ({definition.source_location})'
+            for definition in context.relevant_definitions
+        ]
+        referenced_lines = [f"- {entry}" for entry in context.referenced_texts]
+
         return (
             "You are a legal document accessibility assistant. "
             "Explain legal clauses in plain language while preserving legal nuance. "
@@ -186,7 +201,11 @@ class GeminiAdapter:
             f"Governing law: {metadata.governing_law or 'unknown'}\n"
             f"OCR quality: {metadata.ocr_quality}\n"
             f"Document warnings: {metadata.warnings or ['none']}\n"
-            f"Source location: {source_location}\n\n"
+            f"Source location: {source_location}\n"
+            f"Parent heading: {context.parent_heading}\n"
+            f"Referenced sections: {context.referenced_sections or ['none']}\n"
+            f"Relevant definitions:\n{chr(10).join(definition_lines) if definition_lines else '- none'}\n"
+            f"Referenced section text:\n{chr(10).join(referenced_lines) if referenced_lines else '- none'}\n\n"
             "Preserve negations, exceptions, deadlines, cross-references, one-sided rights, and payment details.\n\n"
             f"Clause:\n{text}"
         )
