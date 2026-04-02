@@ -10,6 +10,7 @@ from .models import (
     DocumentContext,
     DocumentMetadata,
     DocumentSummary,
+    ExtractedDocument,
     RiskLevel,
     SimplificationRequest,
     SimplificationResult,
@@ -57,11 +58,12 @@ class SimplifierService:
         self.fallback_model = HeuristicClauseExtractor()
 
     def simplify(self, request: SimplificationRequest) -> SimplificationResult:
-        text = self.reader.extract(request.pdf_bytes)
+        extracted = self.reader.extract(request.pdf_bytes)
+        text = extracted.text
         if not text.strip():
             raise ValueError("No readable text was found in the uploaded PDF.")
 
-        metadata = self._classify_document(text)
+        metadata = self._classify_document(text, extracted)
         segments = self.segmenter.segment(text, self.model.max_input_length)
         document_context = self.context_builder.build(segments)
 
@@ -136,7 +138,7 @@ class SimplifierService:
             warnings.append("This clause refers to other sections that may materially affect its meaning.")
         return warnings
 
-    def _classify_document(self, text: str) -> DocumentMetadata:
+    def _classify_document(self, text: str, extracted: ExtractedDocument) -> DocumentMetadata:
         lowered = text.lower()
         document_type = "other"
         best_score = 0
@@ -147,7 +149,7 @@ class SimplifierService:
                 best_score = score
                 document_type = candidate
 
-        warnings: list[str] = []
+        warnings: list[str] = list(extracted.warnings)
         is_partial = False
 
         if "page 1 of" in lowered and "signature" not in lowered:
@@ -158,7 +160,11 @@ class SimplifierService:
             warnings.append("Very little text was extracted from the PDF.")
 
         ocr_quality = "good"
-        if any(token in text for token in ["�", "  ", "...."]) or len(re.findall(r"[A-Za-z]", text)) < len(text) * 0.5:
+        if extracted.extraction_method == "ocr":
+            ocr_quality = "ocr_used"
+        elif extracted.ocr_attempted and not extracted.ocr_available:
+            ocr_quality = "needs_ocr"
+        elif any(token in text for token in ["�", "  ", "...."]) or len(re.findall(r"[A-Za-z]", text)) < len(text) * 0.5:
             ocr_quality = "needs_review"
             warnings.append("The extracted text may contain OCR issues.")
 
@@ -170,7 +176,10 @@ class SimplifierService:
             governing_law=governing_law,
             is_partial=is_partial,
             ocr_quality=ocr_quality,
-            warnings=warnings,
+            extraction_method=extracted.extraction_method,
+            ocr_attempted=extracted.ocr_attempted,
+            ocr_available=extracted.ocr_available,
+            warnings=self._unique(warnings),
         )
 
     def _render_clause(self, extraction: ClauseExtraction, segment: ClauseSegment) -> Clause:
@@ -257,6 +266,8 @@ class SimplifierService:
             overview_parts.append("The document creates concrete obligations that should be reviewed closely.")
         if key_deadlines:
             overview_parts.append("It also includes timing requirements.")
+        if metadata.ocr_quality in {"needs_ocr", "needs_review"}:
+            overview_parts.append("Source text quality may limit reliability because the PDF appears scanned or low quality.")
         if policy_driven_sections:
             overview_parts.append("Several sensitive legal sections receive elevated review because they can materially change rights or liability.")
         if metadata.warnings:

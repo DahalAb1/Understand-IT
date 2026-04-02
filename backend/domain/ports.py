@@ -1,10 +1,17 @@
 from typing import Protocol
 
-from .models import ClauseContext, ClauseExtraction, DocumentMetadata, SimplificationRequest, SimplificationResult
+from .models import (
+    ClauseContext,
+    ClauseExtraction,
+    DocumentMetadata,
+    ExtractedDocument,
+    SimplificationRequest,
+    SimplificationResult,
+)
 
 
 class PdfReaderPort(Protocol):
-    def extract(self, pdf_bytes: bytes) -> str:
+    def extract(self, pdf_bytes: bytes) -> ExtractedDocument:
         ...
 
 

@@ -9,11 +9,23 @@ class RiskLevel(Enum):
 
 
 @dataclass
+class ExtractedDocument:
+    text: str
+    extraction_method: str = "text"
+    ocr_attempted: bool = False
+    ocr_available: bool = False
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
 class DocumentMetadata:
     document_type: str
     governing_law: str | None = None
     is_partial: bool = False
     ocr_quality: str = "good"
+    extraction_method: str = "text"
+    ocr_attempted: bool = False
+    ocr_available: bool = False
     warnings: list[str] = field(default_factory=list)
 
 

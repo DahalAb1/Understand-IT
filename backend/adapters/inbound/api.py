@@ -30,6 +30,9 @@ def create_router(simplifier: SimplifierPort) -> APIRouter:
                 "governing_law": result.metadata.governing_law,
                 "is_partial": result.metadata.is_partial,
                 "ocr_quality": result.metadata.ocr_quality,
+                "extraction_method": result.metadata.extraction_method,
+                "ocr_attempted": result.metadata.ocr_attempted,
+                "ocr_available": result.metadata.ocr_available,
                 "warnings": result.metadata.warnings,
             },
             "summary": {
