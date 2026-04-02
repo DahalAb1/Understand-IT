@@ -27,6 +27,9 @@ class DefinedTerm:
 @dataclass
 class ClauseContext:
     parent_heading: str
+    parent_source_location: str | None = None
+    parent_text: str | None = None
+    hierarchy_path: list[str] = field(default_factory=list)
     referenced_sections: list[str] = field(default_factory=list)
     referenced_texts: list[str] = field(default_factory=list)
     relevant_definitions: list[DefinedTerm] = field(default_factory=list)
@@ -36,6 +39,8 @@ class ClauseContext:
 class DocumentContext:
     definitions: dict[str, DefinedTerm] = field(default_factory=dict)
     sections: dict[str, str] = field(default_factory=dict)
+    segments_by_id: dict[str, "ClauseSegment"] = field(default_factory=dict)
+    segment_order: list[str] = field(default_factory=list)
     cross_references: dict[str, list[str]] = field(default_factory=dict)
 
 
@@ -46,7 +51,9 @@ class ClauseSegment:
     text: str
     source_location: str
     section_number: str | None = None
+    parent_id: str | None = None
     parent_heading: str | None = None
+    parent_section_number: str | None = None
     referenced_sections: list[str] = field(default_factory=list)
 
 

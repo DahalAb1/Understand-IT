@@ -192,6 +192,7 @@ class GeminiAdapter:
             for definition in context.relevant_definitions
         ]
         referenced_lines = [f"- {entry}" for entry in context.referenced_texts]
+        hierarchy_line = " > ".join(context.hierarchy_path) if context.hierarchy_path else source_location
         policy_focus = ", ".join(policy.required_focus) if policy else "general legal meaning"
         policy_questions = "\n".join(f"- {question}" for question in policy.review_questions) if policy else "- none"
         policy_triggers = ", ".join(policy.review_triggers) if policy else "none"
@@ -200,21 +201,24 @@ class GeminiAdapter:
             "You are a legal document accessibility assistant. "
             "Explain legal clauses in plain language while preserving legal nuance. "
             "Do not provide legal advice. Extract obligations, rights, conditions, exceptions, deadlines, money terms, and missing context. "
-            "If information is uncertain or depends on other sections, say so explicitly.\n\n"
+            "If information is uncertain or depends on parent sections, sibling clauses, or other sections, say so explicitly.\n\n"
             "Return JSON only matching the requested extraction fields.\n\n"
             f"Document type: {metadata.document_type}\n"
             f"Governing law: {metadata.governing_law or 'unknown'}\n"
             f"OCR quality: {metadata.ocr_quality}\n"
             f"Document warnings: {metadata.warnings or ['none']}\n"
             f"Source location: {source_location}\n"
+            f"Hierarchy path: {hierarchy_line}\n"
             f"Parent heading: {context.parent_heading}\n"
+            f"Parent source location: {context.parent_source_location or 'none'}\n"
+            f"Parent clause text:\n{context.parent_text or '- none'}\n"
             f"Referenced sections: {context.referenced_sections or ['none']}\n"
             f"Relevant definitions:\n{chr(10).join(definition_lines) if definition_lines else '- none'}\n"
             f"Referenced section text:\n{chr(10).join(referenced_lines) if referenced_lines else '- none'}\n"
             f"Policy focus: {policy_focus}\n"
             f"Policy trigger terms to watch for: {policy_triggers}\n"
             f"Policy review questions:\n{policy_questions}\n\n"
-            "Preserve negations, exceptions, deadlines, cross-references, one-sided rights, payment details, and any waiver of remedies or procedural rights.\n\n"
+            "Preserve negations, exceptions, deadlines, parent-child hierarchy, cross-references, one-sided rights, payment details, and any waiver of remedies or procedural rights.\n\n"
             f"Clause:\n{text}"
         )
 

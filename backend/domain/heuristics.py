@@ -55,6 +55,8 @@ class HeuristicClauseExtractor:
         missing_context: list[str] = []
         if defined_terms:
             missing_context.append("Defined terms may require review against the document definitions section.")
+        if context.parent_text:
+            missing_context.append("This clause may depend on a parent section for its full meaning.")
         if context.referenced_sections:
             missing_context.append("This clause refers to other sections that may change its effect.")
         if metadata.is_partial:
@@ -69,8 +71,8 @@ class HeuristicClauseExtractor:
         legal_precision_note = None
         if policy and policy.precision_note:
             legal_precision_note = policy.precision_note
-        elif conditions or exceptions or context.referenced_sections:
-            legal_precision_note = "Important conditions, exceptions, or cross-references apply to this clause and should be read with the original text."
+        elif conditions or exceptions or context.referenced_sections or context.parent_text:
+            legal_precision_note = "Important conditions, hierarchy, exceptions, or cross-references apply to this clause and should be read with the original text."
 
         questions_to_ask = self._questions(clause_type, money_terms, deadlines, exceptions, context.referenced_sections, policy)
 
@@ -156,6 +158,8 @@ class HeuristicClauseExtractor:
         policy,
     ) -> str:
         parts = [f"This clause is about {title.lower()}."]
+        if context.parent_source_location:
+            parts.append(f"It sits under {context.parent_source_location}, so it may qualify or narrow a broader parent rule.")
         if obligations:
             parts.append("It creates one or more obligations.")
         if rights:
