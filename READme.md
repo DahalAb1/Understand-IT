@@ -16,3 +16,24 @@ Unnecessary complexity:
 **Understand-IT** decodes dense content—contracts, disclosures, academic papers, legal docs—into clear, accessible language.
 
 Apache 2.0 © Abhinesh Dahal
+
+## Model Provider Setup
+The backend now defaults to OpenAI for clause extraction. Gemini remains available as an alternate provider.
+
+Recommended default:
+
+```env
+MODEL_PROVIDER=openai
+OPENAI_API_KEY=your_api_key_here
+OPENAI_MODEL=gpt-4o-mini
+```
+
+Optional Gemini fallback:
+
+```env
+MODEL_PROVIDER=gemini
+GEMINI_API_KEY=your_api_key_here
+GEMINI_MODEL=gemini-2.0-flash
+```
+
+Install backend dependencies after updating `backend/requirements.txt` so the `openai` package is available.
