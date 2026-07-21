@@ -1,7 +1,11 @@
 
+# Personal / working notes — keep out of the repo
 notes.txt
+notes.md
 plans.txt
 context.txt
+context.md
+how_it_works.txt
 .env
 
 frontend/node_modules/
