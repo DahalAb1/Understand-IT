@@ -4,24 +4,18 @@ import time
 from typing import Any
 
 try:
-    from google import genai as google_genai
-    from google.genai import types as google_genai_types
+    from openai import OpenAI
 except ImportError:
-    google_genai = None
-    google_genai_types = None
-
-try:
-    import google.generativeai as legacy_genai
-except ImportError:
-    legacy_genai = None
+    OpenAI = None
 
 from ...domain.models import ClauseContext, ClauseExtraction, DocumentMetadata, RiskLevel
 from .structured_clause_extraction import CLAUSE_SCHEMA, build_clause_prompt
 
 
-class GeminiAdapter:
-    provider_name = "gemini"
-    default_model = "gemini-2.0-flash"
+class CloudflareAdapter:
+    provider_name = "cloudflare"
+    # Smaller Llama variant: JSON-mode capable and lighter on the free-tier neuron quota.
+    default_model = "@cf/meta/llama-3.1-8b-instruct-fast"
     max_input_length = 4000
 
     def __init__(
@@ -30,25 +24,22 @@ class GeminiAdapter:
         model_name: str = default_model,
         max_retries: int = 2,
     ):
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY")
+        self.api_key = api_key or os.getenv("CLOUDFLARE_API_KEY")
+        # account_id is Cloudflare-specific, so it is read here rather than passed
+        # through the registry's generic {PREFIX}_API_KEY / {PREFIX}_MODEL pair.
+        self.account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
         self.model_name = model_name
         self.max_retries = max_retries
         self.client = None
-        self.legacy_model = None
 
-        if not self.api_key:
-            return
-
-        if google_genai is not None:
-            self.client = google_genai.Client(api_key=self.api_key)
-            return
-
-        if legacy_genai is not None:
-            legacy_genai.configure(api_key=self.api_key)
-            self.legacy_model = legacy_genai.GenerativeModel(model_name)
+        if self.api_key and self.account_id and OpenAI is not None:
+            self.client = OpenAI(
+                api_key=self.api_key,
+                base_url=f"https://api.cloudflare.com/client/v4/accounts/{self.account_id}/ai/v1",
+            )
 
     def is_available(self) -> bool:
-        return self.client is not None or self.legacy_model is not None
+        return self.client is not None
 
     def extract_clause(
         self,
@@ -58,7 +49,10 @@ class GeminiAdapter:
         context: ClauseContext,
     ) -> ClauseExtraction:
         if not self.is_available():
-            raise RuntimeError("The configured model provider is unavailable. Set GEMINI_API_KEY and install a supported Gemini SDK to enable clause extraction.")
+            raise RuntimeError(
+                "The configured model provider is unavailable. Set CLOUDFLARE_API_KEY and "
+                "CLOUDFLARE_ACCOUNT_ID and install the OpenAI SDK to enable clause extraction."
+            )
 
         prompt = build_clause_prompt(text, metadata, source_location, context)
         payload = self._generate_payload(prompt)
@@ -88,47 +82,36 @@ class GeminiAdapter:
         last_error: Exception | None = None
         for attempt in range(self.max_retries + 1):
             try:
-                if self.client is not None:
-                    return self._generate_with_current_sdk(prompt)
-                if self.legacy_model is not None:
-                    return self._generate_with_legacy_sdk(prompt)
-                raise RuntimeError("No Gemini SDK is available.")
+                # Cloudflare's OpenAI-compatible layer only implements Chat Completions,
+                # not the newer Responses API used by OpenAIAdapter — hence the separate
+                # adapter. JSON Mode uses the same json_schema response_format shape.
+                response = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.2,
+                    # Workers AI defaults to a small output budget; the 16-field schema
+                    # needs more room or the JSON gets truncated mid-string.
+                    max_tokens=2048,
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "clause_extraction",
+                            "schema": CLAUSE_SCHEMA,
+                            "strict": True,
+                        },
+                    },
+                )
+                payload = response.choices[0].message.content
+                if not payload:
+                    raise RuntimeError("The model returned an empty response.")
+                return self._load_json(payload)
             except Exception as exc:
                 last_error = exc
                 if attempt >= self.max_retries:
                     break
                 time.sleep(0.6 * (attempt + 1))
+
         raise RuntimeError("The model could not produce a reliable structured extraction.") from last_error
-
-    def _generate_with_current_sdk(self, prompt: str) -> dict[str, Any]:
-        response = self.client.models.generate_content(
-            model=self.model_name,
-            contents=prompt,
-            config=google_genai_types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_json_schema=CLAUSE_SCHEMA,
-                temperature=0.2,
-            ),
-        )
-        text = getattr(response, "text", None)
-        if not text:
-            raise RuntimeError("The model returned an empty response.")
-        return self._load_json(text)
-
-    def _generate_with_legacy_sdk(self, prompt: str) -> dict[str, Any]:
-        response = self.legacy_model.generate_content(prompt)
-        text = getattr(response, "text", None)
-        if not text:
-            raise RuntimeError("The model returned an empty response.")
-        return self._load_json(self._strip_code_fence(text))
-
-    def _strip_code_fence(self, text: str) -> str:
-        payload = text.strip()
-        if payload.startswith("```"):
-            payload = payload.split("```", 2)[1]
-            if payload.startswith("json"):
-                payload = payload[4:]
-        return payload.strip()
 
     def _load_json(self, text: str) -> dict[str, Any]:
         try:
@@ -162,6 +145,7 @@ class GeminiAdapter:
 
     def _as_confidence(self, value: Any) -> float:
         try:
-            return max(0.0, min(float(value), 1.0))
+            confidence = float(value)
         except (TypeError, ValueError):
-            return 0.65
+            return 0.5
+        return max(0.0, min(1.0, confidence))

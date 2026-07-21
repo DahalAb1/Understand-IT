@@ -13,12 +13,14 @@ from .structured_clause_extraction import CLAUSE_SCHEMA, build_clause_prompt
 
 
 class OpenAIAdapter:
+    provider_name = "openai"
+    default_model = "gpt-4o-mini"
     max_input_length = 4000
 
     def __init__(
         self,
         api_key: str | None = None,
-        model_name: str = "gpt-4o-mini",
+        model_name: str = default_model,
         max_retries: int = 2,
     ):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")

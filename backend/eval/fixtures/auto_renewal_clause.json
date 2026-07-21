@@ -1,0 +1,21 @@
+{
+  "id": "auto_renewal_clause",
+  "source_location": "Section 3.2",
+  "metadata": {
+    "document_type": "saas_terms"
+  },
+  "context": {
+    "parent_heading": "Term and Renewal",
+    "hierarchy_path": ["Subscription Agreement", "Term and Renewal", "Section 3.2"]
+  },
+  "text": "The initial subscription term is twelve (12) months. Thereafter, this Agreement shall automatically renew for successive one-year terms unless Customer provides written notice of non-renewal at least sixty (60) days before the end of the then-current term. Renewal fees may increase by up to eight percent (8%) upon each renewal term with notice on the applicable invoice.",
+  "expected": {
+    "risk_level": "medium",
+    "clause_type": "renewal",
+    "contains": [
+      { "field": "deadlines", "phrase": "60" },
+      { "field": "plain_english", "phrase": "automatically renew" },
+      { "field": "money_terms", "phrase": "8%" }
+    ]
+  }
+}

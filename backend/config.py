@@ -10,24 +10,19 @@ def _as_bool(value: str | None, default: bool = False) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    model_provider: str = "openai"
-    gemini_api_key: str | None = None
-    gemini_model: str = "gemini-2.0-flash"
-    openai_api_key: str | None = None
-    openai_model: str = "gpt-4o-mini"
+    model_provider: str = "cloudflare"
     allowed_origin: str = "http://localhost:5173"
     cache_path: str = "cache.db"
     model_max_retries: int = 2
     enable_trace: bool = False
 
 
+# Provider-specific keys/models are no longer named fields here. The adapter registry
+# (adapters/outbound/registry.py) resolves them generically from {PROVIDER}_API_KEY /
+# {PROVIDER}_MODEL env vars, so adding a provider never touches this file.
 def load_settings() -> Settings:
     return Settings(
-        model_provider=os.getenv("MODEL_PROVIDER", "openai").strip().lower(),
-        gemini_api_key=os.getenv("GEMINI_API_KEY"),
-        gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
-        openai_api_key=os.getenv("OPENAI_API_KEY"),
-        openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+        model_provider=os.getenv("MODEL_PROVIDER", "cloudflare").strip().lower(),
         allowed_origin=os.getenv("FRONTEND_ORIGIN", "http://localhost:5173"),
         cache_path=os.getenv("CACHE_DB_PATH", "cache.db"),
         model_max_retries=max(0, int(os.getenv("MODEL_MAX_RETRIES", "2"))),

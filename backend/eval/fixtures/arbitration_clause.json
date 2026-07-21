@@ -1,0 +1,26 @@
+{
+  "id": "arbitration_clause",
+  "source_location": "Section 14",
+  "metadata": {
+    "document_type": "saas_terms",
+    "governing_law": "Delaware"
+  },
+  "context": {
+    "parent_heading": "Dispute Resolution",
+    "hierarchy_path": ["Master Services Agreement", "Dispute Resolution", "Section 14"],
+    "referenced_sections": ["Section 15"],
+    "referenced_texts": [
+      "Section 15 states that either party may seek temporary injunctive relief in court for misuse of confidential information."
+    ]
+  },
+  "text": "Any dispute, claim, or controversy arising out of or relating to this Agreement shall be resolved by binding arbitration administered by the American Arbitration Association in Chicago, Illinois. Each party waives any right to a jury trial or to participate in a class action. Customer shall bear its own attorneys' fees and one-half of the arbitration costs, except as otherwise awarded by the arbitrator.",
+  "expected": {
+    "risk_level": "high",
+    "clause_type": "arbitration",
+    "contains": [
+      { "field": "plain_english", "phrase": "binding arbitration" },
+      { "field": "plain_english", "phrase": "jury trial" },
+      { "field": "questions_to_ask", "phrase": "court" }
+    ]
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "id": "indemnity_clause",
+  "source_location": "Section 9",
+  "metadata": {
+    "document_type": "contractor_agreement",
+    "governing_law": "California"
+  },
+  "context": {
+    "parent_heading": "Indemnification",
+    "hierarchy_path": ["Consulting Agreement", "Indemnification", "Section 9"],
+    "relevant_definitions": [
+      {
+        "term": "Claims",
+        "definition": "all third-party demands, suits, losses, damages, liabilities, judgments, settlements, costs, and expenses",
+        "source_location": "Definitions"
+      }
+    ]
+  },
+  "text": "Consultant shall defend, indemnify, and hold harmless Company and its officers, directors, employees, and agents from and against any and all Claims arising out of or related to Consultant's services, including any allegation that the work product infringes a third party's intellectual property rights. Consultant's obligations include reasonable attorneys' fees and settlement costs.",
+  "expected": {
+    "risk_level": "high",
+    "clause_type": "indemnity",
+    "contains": [
+      { "field": "plain_english", "phrase": "third party" },
+      { "field": "obligations", "phrase": "defend" },
+      { "field": "defined_terms_used", "phrase": "Claims" }
+    ]
+  }
+}

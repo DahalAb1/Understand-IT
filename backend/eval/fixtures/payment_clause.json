@@ -1,0 +1,21 @@
+{
+  "id": "payment_clause",
+  "source_location": "Section 5",
+  "metadata": {
+    "document_type": "saas_terms"
+  },
+  "context": {
+    "parent_heading": "Fees and Payment",
+    "hierarchy_path": ["Order Form", "Fees and Payment", "Section 5"]
+  },
+  "text": "Customer shall pay all undisputed invoices within fifteen (15) days after receipt. Any late payment will accrue interest at the lesser of one and one-half percent (1.5%) per month or the maximum amount allowed by law. Fees are non-refundable once paid except as expressly stated in Section 11.",
+  "expected": {
+    "risk_level": "medium",
+    "clause_type": "payment",
+    "contains": [
+      { "field": "deadlines", "phrase": "15" },
+      { "field": "money_terms", "phrase": "1.5%" },
+      { "field": "plain_english", "phrase": "non-refundable" }
+    ]
+  }
+}
