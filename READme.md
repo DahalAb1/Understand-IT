@@ -1,89 +1,66 @@
 # Understand-IT
 
-**A legal-document analyzer that turns a dense PDF contract into a plain-English, clause-by-clause breakdown — built as a strict hexagonal architecture where the domain logic never knows whether it's talking to an LLM, a regex fallback, or a mock.**
+Some of the most consequential text in an ordinary life is written in language most people can't read. A lease. An employment contract. A loan agreement. That isn't an accident of style: legal writing optimizes for precision in a courtroom, not for the person holding the pen. The result is a quiet unfairness. Understanding what you're agreeing to costs money, and people who don't have it sign anyway.
 
-![Understand-IT — drag in a PDF, get it decoded](assets/landing.png)
+Understand-IT is my attempt at that problem. It reads a legal document and explains it clause by clause in plain English: what each clause means, how risky it is, and what it commits you to pay or do. A professional gets a first-pass review in seconds instead of an hour. Someone who was never going to hire a lawyer gets to know what they signed. The knowledge in the document stops being gated by the language it's written in.
 
-I built this for two reasons. First, legal documents waste an enormous amount of *time* — even people who can read them burn hours decoding dense clauses. Second, and more importantly, they create an *access gap*: people who can't afford a lawyer sign things they don't understand. Understand-IT does the first-pass clause-by-clause review in seconds, and it does it for anyone. It explains — it does not give legal advice.
+And the gap is wider than money. People are locked out of these documents for all kinds of reasons: they read English as a second language, they process dense text differently, they never learned the legal vocabulary because almost nobody does. The information in a contract belongs to the person signing it. This app's job is to hand it over. It explains what a document says; it does not give legal advice.
 
-But the app is also where I taught myself how a backend actually holds together: ports and adapters, dependency injection, graceful degradation, and a lot of things that live below the framework — how a process even gets its environment, why CORS is a browser decision and not a server one. Those notes are in [Notes from the Trenches](#notes-from-the-trenches).
+![Understand-IT: drag in a PDF, get it decoded](assets/landing.png)
 
 ---
 
-## See it in action
+## What it does
 
-Drop in a PDF, watch the pipeline run, and get every clause decoded with a risk level plus the obligations, deadlines, and money terms pulled out of it.
+Take one clause from a lease:
+
+> The lessee shall indemnify and hold harmless the lessor from any and all liabilities, claims, and demands, whether arising in tort or contract, which may result from the lessee's occupancy or use of the leased premises.
+
+Understand-IT turns it into:
+
+> The person renting must protect the owner from any problems, claims, or lawsuits that happen because of their use of the property.
+
+Every clause in the document gets this treatment, along with a risk level and the obligations, deadlines, and money amounts hidden in it. In the app it looks like this:
 
 <p align="center">
   <img src="assets/upload.png" width="49%" alt="Select a PDF to simplify" />
-  <img src="assets/processing.png" width="49%" alt="Analyzing the document — extracting text, identifying clauses, assessing risk" />
+  <img src="assets/processing.png" width="49%" alt="Analyzing the document: extracting text, identifying clauses, assessing risk" />
 </p>
 
-![A clause decoded — plain-English explanation with a risk level](assets/analysis.png)
+![A clause decoded: plain-English explanation with a risk level](assets/analysis.png)
 
 ---
 
-## The journey
+## Build & run
 
-The pipeline started simple — *PDF in, plain English out* — and every real document broke a naive version of it, which is how it grew into what it is.
+**Prerequisites:** Python 3.11+, Node 18+, and a model provider key. Cloudflare Workers AI has a free tier and is the default, so you can run the whole thing without paid keys.
 
-**Send the whole document to an LLM.** The obvious first version. It falls apart immediately: a 40-page lease blows past context limits, costs add up, and you get one undifferentiated blob back instead of clause-level risk. So the document has to be **segmented** into clauses first, by heading and section-number detection, each sized to the model's input budget.
+```bash
+# 1. configure (Cloudflare is the default provider)
+cp .env.example .env
+#    set CLOUDFLARE_API_KEY and CLOUDFLARE_ACCOUNT_ID (dashboard → AI → Workers AI)
 
-**Send every clause to the LLM.** Better, but wasteful — most clauses are boilerplate that a regex can handle, and paying for an LLM call on "This agreement is governed by the laws of Delaware" is silly. So a **routing heuristic** decides, per clause, whether it's worth the model: high-risk clauses (indemnity, arbitration, limitation of liability), long clauses, and clauses stacked with conditionals go to the LLM; the rest go to a fast heuristic extractor.
+# 2. backend  (http://localhost:8000)
+pip install -r backend/requirements.txt
+uvicorn backend.server:app --port 8000
 
-**Trust the LLM's output.** You can't. An LLM will quietly drop a "not," a deadline, or a dollar amount and hand you fluent, confident, *wrong* plain English. So every extraction runs through a **verifier** that checks whether negations, dates, and money survived, and lowers the confidence score when they didn't. The system says when it's unsure instead of guessing silently.
-
-**Assume the LLM is always there.** It isn't — no key, no network, rate limits. So the regex extractor doesn't just handle boilerplate; it *also implements the same interface as the LLM adapters*, so "no model available" is just another adapter to the domain, not a special case. The app degrades instead of failing.
-
-Everything below is the architecture that fell out of those four problems.
-
----
-
-## The architecture
-
-The backend is textbook **hexagonal (ports & adapters)**. The domain — the actual legal-analysis logic — sits in the center and imports no framework, no HTTP, no LLM SDK, no database. It talks only to `Protocol` interfaces. Everything concrete plugs in at the edges.
-
-```mermaid
-flowchart TB
-    Client([Browser / client])
-
-    subgraph inbound["INBOUND — drives the domain"]
-        API["FastAPI · POST /simplify"]
-    end
-
-    subgraph core["DOMAIN — pure logic, no framework / I-O imports"]
-        SVC["SimplifierService<br/>orchestrates the pipeline"]
-        HELP["segmenter · context_builder<br/>verifier · policies"]
-    end
-
-    subgraph ports["PORTS — Protocol interfaces"]
-        P1(["PdfReaderPort"])
-        P2(["ModelPort"])
-        P3(["CachePort"])
-    end
-
-    subgraph outbound["OUTBOUND — driven by the domain"]
-        PDF["PypdfReader<br/>+ OCR fallback"]
-        subgraph reg["adapter registry"]
-            OAI["OpenAI"]
-            GEM["Gemini"]
-            CF["Cloudflare"]
-        end
-        HEU["Heuristic extractor<br/>no-LLM fallback,<br/>also a ModelPort"]
-        CACHE["SQLite cache"]
-    end
-
-    Client --> API --> SVC
-    SVC -.- HELP
-    SVC --> P1 --> PDF
-    SVC --> P2 --> reg
-    P2 --> HEU
-    SVC --> P3 --> CACHE
+# 3. frontend (http://localhost:5173)
+cd frontend && npm install && npm run dev
 ```
 
-`server.py` is the **composition root** — the only file that imports both the domain and the concrete adapters, instantiates them, and injects them into `SimplifierService`. Nothing else in the codebase knows what a `PypdfReaderAdapter` or `CloudflareAdapter` is. That single wiring point is what makes every claim above ("swap the provider without touching domain code") literally true.
+Open http://localhost:5173 and drop in a PDF.
 
-### The request pipeline, top to bottom
+Before trusting a provider, you can score it against hand-written fixtures with expected `clause_type`, `risk_level`, and required phrases per clause:
+
+```bash
+python -m backend.eval.run_clause_eval --provider cloudflare   # any provider in the registry
+```
+
+---
+
+## How it works
+
+The obvious way to build this app is a single API call: send the whole PDF to a language model, ask for a simple version, return the answer. Every stage in the pipeline below exists because that version fails on real documents in a specific way. This section walks the whole path and assumes no background knowledge.
 
 ```mermaid
 flowchart TB
@@ -104,25 +81,88 @@ flowchart TB
     SUM --> Z["JSON response"]
 ```
 
+1. **Extract the text.** A PDF is not text. It's a layout format, and plenty of legal PDFs are scans, which are photographs of paper with no machine-readable text in them at all. `PypdfReaderAdapter` pulls text out with pypdf, and when a page has none it falls back to OCR (optical character recognition: reading the characters out of the image) via `tesseract`. It also records how trustworthy the extraction was, because every later stage inherits the quality of this one.
 
-1. **Extract** — `PypdfReaderAdapter` reads the PDF text, falling back to OCR (`tesseract` / `pdftoppm`) for scans, and tags the result with a source-quality assessment.
-2. **Classify** — detect document type (NDA, lease, employment, SaaS terms, privacy policy…), governing law, and completeness warnings.
-3. **Segment** — split into clauses by heading/section detection, each within the model's input budget.
-4. **Build context** — resolve each clause's parent clause, cross-references ("Section 4.2"), and the defined terms it leans on.
-5. **Extract per clause** — cache lookup first; on a miss, route (heuristic vs LLM per the rules above), extract into the shared `CLAUSE_SCHEMA`, and fall back to the heuristic if the model errors.
-6. **Verify** — confidence check for dropped negations / dates / money.
-7. **Cache** — content-addressed (SHA-256 of clause + document type) in SQLite; repeated clauses are free.
-8. **Summarize** — aggregate into a document-level plain-language overview and risk report.
+2. **Classify the document.** The app detects what kind of document it's holding (NDA, lease, employment contract, SaaS terms, privacy policy), which law governs it, and whether anything looks incomplete. This exists because clauses don't mean much out of context: a termination clause in a lease and a termination clause in an employment contract carry different risks, and the risk rules downstream need to know which world they're in.
+
+3. **Segment into clauses.** Here is the first failure of the one-API-call version: a model can only accept so much input at once (its context window), and a 40 page lease blows past it. Even when a document fits, you get back one undifferentiated summary, and there is nothing to attach a risk level to. So the text is split into clauses using headings and section numbering, each sized to the model's input budget. Now risk can be assessed clause by clause, and each clause becomes a unit the cache can remember.
+
+4. **Build context for each clause.** The alternative is sending each clause alone, and it fails quietly: "Tenant must comply with the obligations in Section 4.2" is meaningless without Section 4.2, and a term like "the Premises" is defined pages away. So each clause travels with its parent clause, the clauses it cross-references, and the defined terms it leans on.
+
+5. **Route each clause.** Sending every clause to the LLM works, but it's wasteful: most clauses are boilerplate, and paying model latency and cost to have "This agreement is governed by the laws of Delaware" explained is silly. So a routing rule decides, per clause, whether the model is worth it. High-risk clause types (indemnity, arbitration, limitation of liability), long clauses, and clauses stacked with conditionals go to the LLM. The rest go to a fast regex-based extractor. Both paths fill the same output schema, so nothing downstream knows or cares which one ran. The cache is checked before any of this, and if the model errors mid-request, the clause falls back to the regex path instead of failing the whole document.
+
+6. **Verify the output.** The tempting thing is to trust the model. You can't: a language model will occasionally drop a "not", a deadline, or a dollar amount and hand back fluent, confident, wrong plain English. In most apps that's a quality problem. Here it's worse, because the person reading the output can't check it against the original; not being able to read the original is the reason they're here. So a verifier re-checks every extraction for negations, dates, and amounts that existed in the source but vanished from the explanation, and lowers the confidence score when something is missing. The app says it is unsure instead of guessing silently.
+
+7. **Cache the result.** Legal documents repeat themselves; the same boilerplate shows up across thousands of leases. Results are stored in SQLite, keyed by a SHA-256 hash of the clause text plus the document type, so an identical clause seen again is answered from disk for free.
+
+8. **Summarize.** The clause results are aggregated into a document-level overview and risk report, so the reader gets the map before the details.
+
+There is one more failure mode, and it shaped the architecture more than any other: the model is not always there. Keys expire, networks drop, and sometimes you're just rate limited. The alternative is a hard dependency, where no model means no product, and that would lock out exactly the people this project is for, the ones without an API budget. Instead, the regex extractor implements the same interface as the LLM adapters, so "no model available" is just another model as far as the rest of the system is concerned. The app degrades; it never dies. The next section explains the structure that makes that a one-line fact instead of a pile of if-statements.
+
+---
+
+## Architecture
+
+The design goal: swapping the AI provider (OpenAI, Gemini, Cloudflare, or none at all) must never touch the analysis logic.
+
+It's worth naming the alternative, because it's how most small apps get built: the web route imports the OpenAI SDK directly, calls it in the middle of the business logic, and reads environment variables wherever it happens to need them. That works until you want a second provider. Then every file that mentions the SDK is a change site, and nothing can be tested without network access.
+
+This backend is hexagonal instead, a pattern also called ports and adapters. The idea in plain terms:
+
+- The **domain** is the center: segmentation, context building, routing, verification, risk policies. Pure Python. It imports no web framework, no LLM SDK, no database.
+- A **port** is a promise, written as a Python `Protocol`: whatever object you hand the domain must have these methods. There are four of them: `PdfReaderPort`, `ModelPort`, `CachePort`, `SimplifierPort`. The domain talks only to these promises.
+- An **adapter** is a concrete object that keeps a promise. pypdf keeps the PDF promise. The OpenAI, Gemini, and Cloudflare adapters keep the model promise. So does the regex extractor, which is the trick behind the graceful fallback: to the domain, it is indistinguishable from a real model.
+- **Inbound** adapters drive the domain (an HTTP request arrives and calls `simplify()`). **Outbound** adapters are driven by it (it asks for a PDF's text, a model's answer, a cache entry).
+
+```mermaid
+flowchart TB
+    Client([Browser / client])
+
+    subgraph inbound["INBOUND: drives the domain"]
+        API["FastAPI · POST /simplify"]
+    end
+
+    subgraph core["DOMAIN: pure logic, no framework or I/O imports"]
+        SVC["SimplifierService<br/>orchestrates the pipeline"]
+        HELP["segmenter · context_builder<br/>verifier · policies"]
+    end
+
+    subgraph ports["PORTS: Protocol interfaces"]
+        P1(["PdfReaderPort"])
+        P2(["ModelPort"])
+        P3(["CachePort"])
+    end
+
+    subgraph outbound["OUTBOUND: driven by the domain"]
+        PDF["PypdfReader<br/>+ OCR fallback"]
+        subgraph reg["adapter registry"]
+            OAI["OpenAI"]
+            GEM["Gemini"]
+            CF["Cloudflare"]
+        end
+        HEU["Heuristic extractor<br/>no-LLM fallback,<br/>also a ModelPort"]
+        CACHE["SQLite cache"]
+    end
+
+    Client --> API --> SVC
+    SVC -.- HELP
+    SVC --> P1 --> PDF
+    SVC --> P2 --> reg
+    P2 --> HEU
+    SVC --> P3 --> CACHE
+```
+
+`server.py` is the composition root: the only file that imports both the domain and the concrete adapters, builds them, and hands them into `SimplifierService`. Nothing else in the codebase knows a `CloudflareAdapter` exists. That single wiring point is what the design goal cashes out to. Swapping providers is a one-file change, the domain can be tested with fakes instead of network calls, and the no-model fallback costs nothing extra.
 
 ---
 
 ## Design decisions
 
-### Provider config: from `if/elif` to a registry
+### Provider config: from if/elif to a registry
 
-**Problem.** Adding a model provider used to touch four places — a named field in `Settings`, an `if/elif` branch in `server.py`, a duplicate branch in the eval harness, and a model-name lookup. For a project whose whole point is *swappable providers*, that's the exact wrong shape.
+Here is what this project used to do. Adding a provider touched four places: a named field in `Settings`, an `if/elif` branch in `server.py`, a duplicate branch in the eval harness, and a model-name lookup. Four edits for a project whose entire point is swappable providers. Worse, if a provider was configured but its key or SDK was missing, the app booted fine and silently fell back to the heuristic on every clause, so you thought you were reading model output when you weren't.
 
-**Solution.** A registry maps a provider name to its adapter class, and credentials resolve generically from the environment:
+Now a registry maps a provider name to its adapter class, and credentials resolve generically from the environment:
 
 ```python
 ADAPTER_REGISTRY = {
@@ -133,19 +173,21 @@ ADAPTER_REGISTRY = {
 # build_model_adapter() reads MODEL_PROVIDER, then {PROVIDER}_API_KEY / {PROVIDER}_MODEL
 ```
 
-Adding a provider is now *one adapter class + one line*. No changes to `config.py`, `server.py`, or the eval harness. And if the configured provider is missing its key or SDK, the app logs a startup warning and degrades to the heuristic — instead of booting fine and silently falling back on every clause.
+Adding a provider is one adapter class plus one registry line, with no changes to `config.py`, `server.py`, or the eval harness. A misconfigured provider now logs a startup warning before degrading, so the fallback is visible instead of silent.
 
-**Still imperfect.** Cloudflare needs an account ID that doesn't fit the generic `{PROVIDER}_API_KEY` shape, so `CloudflareAdapter` reads `CLOUDFLARE_ACCOUNT_ID` itself — a small dent in the otherwise uniform contract.
+Still imperfect: Cloudflare needs an account ID that doesn't fit the generic `{PROVIDER}_API_KEY` shape, so `CloudflareAdapter` reads `CLOUDFLARE_ACCOUNT_ID` itself. A small dent in an otherwise uniform contract.
 
 ### The heuristic is a first-class adapter, not a fallback special-case
 
-**Problem.** "Use the LLM, but fall back to regex if it's unavailable" invites `if model_available: ... else: ...` scattered through the domain.
+The natural first instinct is "use the LLM, and if it's unavailable, use regex instead", written as `if model_available: ... else: ...`. The problem is where that if-statement ends up living, which is everywhere. Every new feature has to remember both branches, and the bugs collect in the branch you forgot to update.
 
-**Solution.** `HeuristicClauseExtractor` implements `ModelPort` (`is_available()`, `extract_clause()`) exactly like the real providers. To `SimplifierService`, the fallback is just another model. The routing and fallback logic lives in one place and reads like ordinary dispatch, not a special case.
+Instead, `HeuristicClauseExtractor` implements `ModelPort` (`is_available()`, `extract_clause()`) exactly like the real providers. To `SimplifierService` the fallback is just another model, so the routing and fallback logic lives in one place and reads like ordinary dispatch. This is also the decision that keeps the app usable with zero API keys.
 
-### Structured output, one schema, three providers
+### Structured output: one schema, three providers
 
-All three LLM adapters emit the same `CLAUSE_SCHEMA` (JSON schema) — OpenAI via the Responses API, Cloudflare via its OpenAI-compatible Chat Completions + JSON mode, Gemini via its structured-output config. The domain receives an identical `ClauseExtraction` regardless of who produced it.
+The alternative is letting each provider return its own shape and parsing three formats downstream. Then the domain fills up with provider-specific handling, and providers can't be compared, because their outputs aren't the same kind of thing.
+
+Instead, all three LLM adapters emit the same `CLAUSE_SCHEMA` (a JSON schema): OpenAI through the Responses API, Cloudflare through its OpenAI-compatible JSON mode, Gemini through its structured-output config. The domain receives an identical `ClauseExtraction` no matter who produced it, and the eval harness can score any provider against the same fixtures.
 
 ---
 
@@ -155,42 +197,15 @@ The parts of this project I learned the most from live below the framework. Cond
 
 ### Why this is actually "hexagonal"
 
-`domain/ports.py` is the real boundary — four `Protocol`s, zero implementation. The proof is the `SimplifierService` constructor: its parameters are typed `PdfReaderPort`, `ModelPort`, `CachePort` — interfaces, never concrete classes — so the domain genuinely cannot tell whether `model` is OpenAI, Cloudflare, or a regex. **Inbound** adapters *drive* the domain (an HTTP request calls `simplify()`); **outbound** adapters are what the domain *drives* (a PDF library, an LLM, a cache). `server.py` is the one place they meet, which is the definition of dependency injection at the composition root.
+`domain/ports.py` is the real boundary: four `Protocol`s, zero implementation. The proof is the `SimplifierService` constructor. Its parameters are typed as `PdfReaderPort`, `ModelPort`, `CachePort`, interfaces and never concrete classes, so the domain genuinely cannot tell whether `model` is OpenAI, Cloudflare, or a regex. **Inbound** adapters *drive* the domain (an HTTP request calls `simplify()`); **outbound** adapters are what the domain *drives* (a PDF library, an LLM, a cache). `server.py` is the one place they meet, which is the definition of dependency injection at the composition root.
 
 ### How `.env` actually reaches `os.getenv()`
 
-When zsh runs `python3 server.py`, it does `fork()` then `execve()`. `fork()` duplicates the shell — including its environment array, which is just ordinary process memory (`char **environ`), not a kernel object. `execve()` replaces the program image but keeps that memory, so Python starts already holding a *private copy* of zsh's environment (`PATH`, `HOME`, …). `.env` sits outside all of this — it's an inert file on disk until `load_dotenv()` runs *inside* the Python process, reads it, and appends `KEY=VALUE` pairs onto that already-owned array. That's why the API keys become available only after that line, only in this one process: the disk is touched exactly once, and every later `os.getenv("CLOUDFLARE_API_KEY")` is just a memory lookup. `config.py` does those lookups once and packs them into a typed `Settings`, which is why nothing else in the app touches `os.environ`.
+When zsh runs `python3 server.py`, it does `fork()` then `execve()`. `fork()` duplicates the shell, including its environment array, which is just ordinary process memory (`char **environ`), not a kernel object. `execve()` replaces the program image but keeps that memory, so Python starts already holding a *private copy* of zsh's environment (`PATH`, `HOME`, …). `.env` sits outside all of this. It's an inert file on disk until `load_dotenv()` runs *inside* the Python process, reads it, and appends `KEY=VALUE` pairs onto that already-owned array. That's why the API keys become available only after that line, and only in this one process: the disk is touched exactly once, and every later `os.getenv("CLOUDFLARE_API_KEY")` is just a memory lookup. `config.py` does those lookups once and packs them into a typed `Settings`, which is why nothing else in the app touches `os.environ`.
 
 ### CORS is a browser decision, not a server one
 
-The easy thing to get backwards: CORS never stops your server from receiving or processing a request. The FastAPI route always runs and always sends a full response. `CORSMiddleware`'s *only* job is deciding what headers to put on that response. The gatekeeping happens later and entirely inside the browser — its networking subsystem receives the full response, checks the CORS headers against the requesting origin, and only *then* decides whether to hand the data to the JS engine running your React code. If they don't match, your `fetch()` promise rejects even though the bytes already arrived. In dev, `http://localhost:5173` (frontend) and `http://localhost:8000` (backend) are two different origins — the browser compares scheme/host/port and has no concept of "you wrote both" — which is the entire reason the middleware has to exist. Because `/simplify` is a file `POST` (a "non-simple" request), the browser also sends an automatic `OPTIONS` preflight first, which the middleware answers by echoing the allowed origin.
-
----
-
-## Build & run
-
-**Prerequisites:** Python 3.11+, Node 18+, and a model provider key. Cloudflare Workers AI has a free tier and is the default, so you can run the whole thing without paid keys.
-
-```bash
-# 1. configure — Cloudflare is the default provider
-cp .env.example .env
-#   set CLOUDFLARE_API_KEY and CLOUDFLARE_ACCOUNT_ID (dashboard → AI → Workers AI)
-
-# 2. backend  (http://localhost:8000)
-pip install -r backend/requirements.txt
-uvicorn backend.server:app --port 8000
-
-# 3. frontend (http://localhost:5173)
-cd frontend && npm install && npm run dev
-```
-
-Open http://localhost:5173 and drop in a PDF.
-
-**Evaluate a provider** against hand-written fixtures before trusting it — expected `clause_type`, `risk_level`, and required phrases per clause:
-
-```bash
-python -m backend.eval.run_clause_eval --provider cloudflare   # any provider in the registry
-```
+The easy thing to get backwards: CORS never stops your server from receiving or processing a request. The FastAPI route always runs and always sends a full response. `CORSMiddleware`'s *only* job is deciding what headers to put on that response. The gatekeeping happens later and entirely inside the browser. Its networking subsystem receives the full response, checks the CORS headers against the requesting origin, and only *then* decides whether to hand the data to the JS engine running your React code. If they don't match, your `fetch()` promise rejects even though the bytes already arrived. In dev, `http://localhost:5173` (frontend) and `http://localhost:8000` (backend) are two different origins; the browser compares scheme, host, and port, and has no concept of "you wrote both", which is the entire reason the middleware has to exist. Because `/simplify` is a file `POST` (a "non-simple" request), the browser also sends an automatic `OPTIONS` preflight first, which the middleware answers by echoing the allowed origin.
 
 ---
 
@@ -198,15 +213,15 @@ python -m backend.eval.run_clause_eval --provider cloudflare   # any provider in
 
 ```
 backend/
-├── server.py                 composition root — wires adapters into the domain, boots FastAPI
+├── server.py                 composition root: wires adapters into the domain, boots FastAPI
 ├── config.py                 env vars → typed Settings
-├── domain/                   ── the hexagon core: pure logic, no I/O imports ──
+├── domain/                   the hexagon core: pure logic, no I/O imports
 │   ├── models.py             domain nouns (Clause, ClauseExtraction, DocumentMetadata…)
 │   ├── ports.py              the boundary: PdfReaderPort, ModelPort, CachePort, SimplifierPort
-│   ├── simplifier.py         SimplifierService — orchestrates the pipeline via ports only
+│   ├── simplifier.py         SimplifierService, orchestrates the pipeline via ports only
 │   ├── segmenter.py          text → clause segments
 │   ├── context_builder.py    parent clauses, cross-references, defined terms
-│   ├── heuristics.py         regex extractor — also implements ModelPort (the fallback)
+│   ├── heuristics.py         regex extractor, also implements ModelPort (the fallback)
 │   ├── policies.py           per-clause-type risk rules + review questions
 │   └── verifier.py           post-extraction confidence check
 ├── adapters/
