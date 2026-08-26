@@ -12,14 +12,6 @@ And the gap is wider than money. People are locked out of these documents for al
 
 ## What it does
 
-Take one clause from a lease:
-
-> The lessee shall indemnify and hold harmless the lessor from any and all liabilities, claims, and demands, whether arising in tort or contract, which may result from the lessee's occupancy or use of the leased premises.
-
-Understand-IT turns it into:
-
-> The person renting must protect the owner from any problems, claims, or lawsuits that happen because of their use of the property.
-
 Every clause in the document gets this treatment, along with a risk level and the obligations, deadlines, and money amounts hidden in it. In the app it looks like this:
 
 <p align="center">
